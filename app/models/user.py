@@ -15,11 +15,16 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    firebase_uid: Mapped[str] = mapped_column(
+        String, unique=True, index=True, nullable=False
+    )
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     username: Mapped[str] = mapped_column(
         String, unique=True, index=True, nullable=False
     )
-    hashed_password: Mapped[str] = mapped_column(String, nullable=False)
+    hashed_password: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )  # Optional for Firebase users
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -34,7 +39,8 @@ class User(Base):
     __table_args__ = (
         Index("idx_user_email_active", "email", "is_active"),
         Index("idx_user_username_active", "username", "is_active"),
+        Index("idx_user_firebase_uid", "firebase_uid"),
     )
 
     def __repr__(self) -> str:
-        return f"<User(id={self.id}, username='{self.username}', email='{self.email}')>"
+        return f"<User(id={self.id}, username='{self.username}', email='{self.email}', firebase_uid='{self.firebase_uid}')>"

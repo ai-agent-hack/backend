@@ -1,11 +1,13 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
+from typing import Optional
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import decode_token
+from app.core.firebase import get_firebase_service, FirebaseService
 from app.repositories.user import UserRepository
 from app.services.user import UserService
 from app.models.user import User
@@ -30,17 +32,19 @@ def get_user_repository(db: Session = Depends(get_db)) -> UserRepository:
 
 def get_user_service(
     user_repository: UserRepository = Depends(get_user_repository),
+    firebase_service: FirebaseService = Depends(get_firebase_service),
 ) -> UserService:
     """
     Dependency to get user service instance.
 
     Args:
         user_repository: User repository dependency
+        firebase_service: Firebase service dependency
 
     Returns:
         UserService instance
     """
-    return UserService(user_repository)
+    return UserService(user_repository, firebase_service)
 
 
 async def get_current_user(
@@ -87,6 +91,46 @@ async def get_current_user(
         return user
     except UserNotFoundError:
         raise credentials_exception
+
+
+async def get_current_user_firebase(
+    firebase_token: Optional[str] = Header(None, alias="Firebase-Token"),
+    user_service: UserService = Depends(get_user_service),
+) -> User:
+    """
+    Dependency to get current authenticated user from Firebase token.
+
+    Args:
+        firebase_token: Firebase ID token from Firebase-Token header
+        user_service: User service dependency
+
+    Returns:
+        Current authenticated user
+
+    Raises:
+        HTTPException: If token is invalid or user not found
+    """
+    if not firebase_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase token required",
+            headers={"WWW-Authenticate": "Firebase"},
+        )
+
+    try:
+        # Authenticate user with Firebase token
+        user = await user_service.authenticate_firebase_user(firebase_token)
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+            )
+        return user
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate Firebase credentials",
+            headers={"WWW-Authenticate": "Firebase"},
+        )
 
 
 def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:

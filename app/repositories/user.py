@@ -2,7 +2,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import UserCreate, UserUpdate, FirebaseUserCreate
 from app.repositories.base import BaseRepository
 
 
@@ -40,6 +40,18 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
         """
         return self.db.query(User).filter(User.username == username).first()
 
+    def get_by_firebase_uid(self, firebase_uid: str) -> Optional[User]:
+        """
+        Get user by Firebase UID.
+
+        Args:
+            firebase_uid: Firebase user UID
+
+        Returns:
+            User instance or None if not found
+        """
+        return self.db.query(User).filter(User.firebase_uid == firebase_uid).first()
+
     def get_active_user_by_email(self, email: str) -> Optional[User]:
         """
         Get active user by email address.
@@ -72,6 +84,22 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
             .first()
         )
 
+    def get_active_user_by_firebase_uid(self, firebase_uid: str) -> Optional[User]:
+        """
+        Get active user by Firebase UID.
+
+        Args:
+            firebase_uid: Firebase user UID
+
+        Returns:
+            Active user instance or None if not found or inactive
+        """
+        return (
+            self.db.query(User)
+            .filter(User.firebase_uid == firebase_uid, User.is_active == True)
+            .first()
+        )
+
     def create_user_with_hashed_password(
         self, user_create: UserCreate, hashed_password: str
     ) -> User:
@@ -92,6 +120,38 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
             del user_data["password"]
 
         db_obj = User(**user_data)
+        self.db.add(db_obj)
+        self.db.commit()
+        self.db.refresh(db_obj)
+        return db_obj
+
+    def create_firebase_user(
+        self,
+        firebase_uid: str,
+        email: str,
+        username: str,
+        full_name: Optional[str] = None,
+    ) -> User:
+        """
+        Create user from Firebase authentication.
+
+        Args:
+            firebase_uid: Firebase user UID
+            email: User's email address
+            username: User's username
+            full_name: User's full name (optional)
+
+        Returns:
+            Created user instance
+        """
+        db_obj = User(
+            firebase_uid=firebase_uid,
+            email=email,
+            username=username,
+            full_name=full_name,
+            is_active=True,
+            hashed_password=None,  # No password needed for Firebase users
+        )
         self.db.add(db_obj)
         self.db.commit()
         self.db.refresh(db_obj)
@@ -120,6 +180,21 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
             True if username exists, False otherwise
         """
         return self.db.query(User).filter(User.username == username).first() is not None
+
+    def firebase_uid_exists(self, firebase_uid: str) -> bool:
+        """
+        Check if Firebase UID already exists in database.
+
+        Args:
+            firebase_uid: Firebase UID to check
+
+        Returns:
+            True if Firebase UID exists, False otherwise
+        """
+        return (
+            self.db.query(User).filter(User.firebase_uid == firebase_uid).first()
+            is not None
+        )
 
     def deactivate_user(self, user_id: int) -> Optional[User]:
         """

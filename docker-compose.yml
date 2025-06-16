@@ -15,11 +15,15 @@ services:
             - DB_PORT=5432
             # - REDIS_URL=redis://redis:6379  # Uncomment when Redis is needed
             - SECRET_KEY=your-secret-key-for-development-change-in-production
+            # Firebase environment variables
+            - FIREBASE_SERVICE_ACCOUNT_JSON=${FIREBASE_SERVICE_ACCOUNT_JSON}
         depends_on:
             - postgres
             # - redis  # Uncomment when Redis is needed
         volumes:
             - ./app:/app/app
+        env_file:
+            - .env
         command:
             [
                 "uvicorn",
