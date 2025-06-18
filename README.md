@@ -1,6 +1,6 @@
 # SOLID 原則に基づく FastAPI バックエンド
 
-SOLID 原則に従い構築されたモダンな FastAPI バックエンドアプリケーションです。GCP Cloud SQL との統合に対応し、Docker でコンテナ化されています。
+FastAPI バックエンドアプリケーションです。GCP Cloud SQL との統合に対応し、Docker でコンテナ化されています。
 
 ## 🏗️ アーキテクチャ
 
@@ -40,12 +40,6 @@ SOLID 原則に従い構築されたモダンな FastAPI バックエンドア�
 git clone <repository-url>
 cd backend
 
-# 仮想環境の作成
-python -m venv venv
-source venv/bin/activate  # Windowsの場合: venv\Scripts\activate
-
-# 依存関係のインストール
-pip install -r requirements.txt
 ```
 
 ### 2. 環境設定
@@ -67,6 +61,12 @@ vim .env
 PROJECT_NAME=FastAPI Backend with SOLID Principles
 ENVIRONMENT=development
 SECRET_KEY=your-super-secret-key
+
+FIREBASE_SERVICE_ACCOUNT_JSON='{
+}'
+
+GOOGLE_APPLICATION_CREDENTIALS='{
+}'
 
 # データベース（ローカルPostgreSQL）
 DB_USER=postgres
@@ -106,16 +106,6 @@ chmod +x cloud_sql_proxy
 alembic upgrade head
 ```
 
-### 4. アプリケーションの起動
-
-```bash
-# 開発モード（自動リロード）
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# またはDocker Composeで
-docker-compose up fastapi
-```
-
 API は以下で利用可能です：
 
 -   **API**: [http://localhost:8000](http://localhost:8000)
@@ -130,10 +120,10 @@ API は以下で利用可能です：
 # 全サービス起動
 docker-compose up
 
-# 特定サービスのみ起動
+# 特定サービスのみ起動 今つかはない)
 docker-compose up fastapi postgres redis
 
-# GCP Cloud SQL Proxy有効化で起動
+# GCP Cloud SQL Proxy有効化で起動 (今つかはない)
 docker-compose --profile gcp up
 ```
 
@@ -164,50 +154,6 @@ alembic downgrade -1
 
 # マイグレーション履歴の確認
 alembic history
-```
-
-## 🔐 API の利用方法
-
-### 認証
-
-```bash
-# 新規ユーザー登録
-curl -X POST "http://localhost:8000/api/v1/users/" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "username": "testuser",
-    "password": "password123",
-    "full_name": "Test User"
-  }'
-
-# ログインしてアクセストークンを取得
-curl -X POST "http://localhost:8000/api/v1/auth/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=testuser&password=password123"
-
-# トークンを使った認証付きリクエスト
-curl -X GET "http://localhost:8000/api/v1/users/me" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-### ユーザー管理
-
-```bash
-# 現在のユーザープロフィール取得
-GET /api/v1/users/me
-
-# ユーザー情報の更新
-PUT /api/v1/users/me
-
-# 全ユーザー取得（スーパーユーザーのみ）
-GET /api/v1/users/
-
-# 特定ユーザー取得
-GET /api/v1/users/{user_id}
-
-# ユーザー無効化（スーパーユーザーのみ）
-POST /api/v1/users/{user_id}/deactivate
 ```
 
 ## 🏛️ プロジェクト構成
