@@ -17,11 +17,14 @@ services:
             - SECRET_KEY=your-secret-key-for-development-change-in-production
             # Firebase environment variables
             - FIREBASE_SERVICE_ACCOUNT_JSON=${FIREBASE_SERVICE_ACCOUNT_JSON}
+            - GOOGLE_PROJECT_ID=ai-agent-hack
+            - GOOGLE_APPLICATION_CREDENTIALS=/app/key.json
         depends_on:
             - postgres
             # - redis  # Uncomment when Redis is needed
         volumes:
             - ./app:/app/app
+            - ./key.json:/app/key.json
         env_file:
             - .env
         command:
