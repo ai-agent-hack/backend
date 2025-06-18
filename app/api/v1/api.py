@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, users, firebase_auth
+from app.api.v1.endpoints import auth, users, firebase_auth, vertex
 
 api_router = APIRouter()
 
@@ -14,3 +14,6 @@ api_router.include_router(
 
 # Include user management routes
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+
+# Include vertex routes
+api_router.include_router(vertex.router, prefix="/vertex", tags=["vertex"])

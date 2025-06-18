@@ -210,3 +210,9 @@ temp/
 *.swo
 .*.swp
 .*.swo
+
+# google
+key.json
+
+# repomix
+repomix-output.xml
