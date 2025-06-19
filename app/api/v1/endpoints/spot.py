@@ -34,8 +34,8 @@ def _generate_sample_spots() -> RecommendSpots:
                 spots=[
                     Spot(
                         spot_id="aaaa",
-                        longitude=124.13,
-                        latitude=124.13,
+                        longitude=139,
+                        latitude=35,
                         recommendation_reason="夜景が綺麗って口コミで言われてるでー",
                         details=SpotDetail(
                             name="六甲山",
@@ -52,8 +52,8 @@ def _generate_sample_spots() -> RecommendSpots:
                 spots=[
                     Spot(
                         spot_id="aaaa",
-                        longitude=124.13,
-                        latitude=124.13,
+                        longitude=139,
+                        latitude=35,
                         recommendation_reason="夜景が綺麗って口コミで言われてるでー",
                         details=SpotDetail(
                             name="六甲山",
@@ -70,8 +70,8 @@ def _generate_sample_spots() -> RecommendSpots:
                 spots=[
                     Spot(
                         spot_id="aaaa",
-                        longitude=124.13,
-                        latitude=124.13,
+                        longitude=139,
+                        latitude=35,
                         recommendation_reason="夜景が綺麗って口コミで言われてるでー",
                         details=SpotDetail(
                             name="六甲山",
