@@ -22,18 +22,12 @@ class User(Base):
     username: Mapped[str] = mapped_column(
         String, unique=True, index=True, nullable=False
     )
-    hashed_password: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True
-    )  # Optional for Firebase users
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
-
-    # Profile fields
-    full_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # Database indexes for performance
     __table_args__ = (

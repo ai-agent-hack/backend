@@ -126,11 +126,7 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
         return db_obj
 
     def create_firebase_user(
-        self,
-        firebase_uid: str,
-        email: str,
-        username: str,
-        full_name: Optional[str] = None,
+        self, firebase_uid: str, email: str, username: str
     ) -> User:
         """
         Create user from Firebase authentication.
@@ -139,18 +135,12 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
             firebase_uid: Firebase user UID
             email: User's email address
             username: User's username
-            full_name: User's full name (optional)
 
         Returns:
             Created user instance
         """
         db_obj = User(
-            firebase_uid=firebase_uid,
-            email=email,
-            username=username,
-            full_name=full_name,
-            is_active=True,
-            hashed_password=None,  # No password needed for Firebase users
+            firebase_uid=firebase_uid, email=email, username=username, is_active=True
         )
         self.db.add(db_obj)
         self.db.commit()

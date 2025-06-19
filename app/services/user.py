@@ -80,7 +80,6 @@ class UserService:
             firebase_uid=firebase_uid,
             email=email,
             username=firebase_user_create.username,
-            full_name=firebase_user_create.full_name,
         )
 
     async def authenticate_firebase_user(self, firebase_token: str) -> User:

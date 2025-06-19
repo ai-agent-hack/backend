@@ -18,19 +18,19 @@ async def firebase_signup(
     user_service: UserService = Depends(get_user_service),
 ) -> Any:
     """
-    Firebase 회원가입 엔드포인트.
+    Firebaseユーザー登録エンドポイント。
 
-    Firebase에서 이미 인증된 사용자를 우리 데이터베이스에 등록합니다.
+    Firebaseで既に認証されたユーザーをデータベースに登録します。
 
     Args:
-        firebase_user_create: Firebase 사용자 생성 데이터
-        user_service: 사용자 서비스 의존성
+        firebase_user_create: Firebaseユーザー作成データ
+        user_service: ユーザーサービス依存性
 
     Returns:
-        생성된 사용자 정보
+        作成されたユーザー情報
 
     Raises:
-        HTTPException: 토큰이 유효하지 않거나 사용자명이 이미 존재하는 경우
+        HTTPException: トークンが無効またはユーザー名が既に存在する場合
     """
     try:
         user = await user_service.create_firebase_user(firebase_user_create)
@@ -50,26 +50,26 @@ async def firebase_login(
     user_service: UserService = Depends(get_user_service),
 ) -> Any:
     """
-    Firebase 로그인 엔드포인트.
+    Firebaseログインエンドポイント。
 
-    Firebase 토큰을 검증하고 JWT 토큰을 반환합니다.
+    Firebaseトークンを検証してJWTトークンを返します。
 
     Args:
-        firebase_auth: Firebase 인증 데이터
-        user_service: 사용자 서비스 의존성
+        firebase_auth: Firebase認証データ
+        user_service: ユーザーサービス依存性
 
     Returns:
-        JWT 액세스 토큰
+        JWTアクセストークン
 
     Raises:
-        HTTPException: 인증에 실패한 경우
+        HTTPException: 認証に失敗した場合
     """
     try:
         user = await user_service.authenticate_firebase_user(
             firebase_auth.firebase_token
         )
 
-        # JWT 토큰 생성
+        # JWT トークン生成
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             subject=user.username, expires_delta=access_token_expires
@@ -92,13 +92,13 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_user_firebase),
 ) -> Any:
     """
-    Firebase 토큰으로 현재 사용자 정보를 가져옵니다.
+    Firebaseトークンで現在のユーザー情報を取得します。
 
     Args:
-        current_user: 현재 사용자 (Firebase 토큰으로 인증됨)
+        current_user: 現在のユーザー（Firebaseトークンで認証済み）
 
     Returns:
-        현재 사용자 정보
+        現在のユーザー情報
     """
     return current_user
 
@@ -108,12 +108,12 @@ async def verify_firebase_token(
     current_user: User = Depends(get_current_user_firebase),
 ) -> Any:
     """
-    Firebase 토큰을 검증하고 사용자 정보를 반환합니다.
+    Firebaseトークンを検証してユーザー情報を返します。
 
     Args:
-        current_user: 현재 사용자 (Firebase 토큰으로 인증됨)
+        current_user: 現在のユーザー（Firebaseトークンで認証済み）
 
     Returns:
-        사용자 정보
+        ユーザー情報
     """
     return current_user

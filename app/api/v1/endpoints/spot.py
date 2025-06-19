@@ -2,11 +2,19 @@ from fastapi import APIRouter, status
 from datetime import time
 
 from app.schemas.spot import (
-    RecommendSpots, TimeSlotSpots, Spot, SpotDetail, TimeSlot,
-    DayOfWeek, BusinessHours, RecommendSpotFromChatRequest, RecommendSpotFromPreInfoRequest
+    RecommendSpots,
+    TimeSlotSpots,
+    Spot,
+    SpotDetail,
+    TimeSlot,
+    DayOfWeek,
+    BusinessHours,
+    RecommendSpotFromChatRequest,
+    RecommendSpotFromPreInfoRequest,
 )
 
 router = APIRouter()
+
 
 def _generate_sample_spots() -> RecommendSpots:
     """サンプルのスポット情報を生成する共通関数"""
@@ -14,7 +22,8 @@ def _generate_sample_spots() -> RecommendSpots:
         day: BusinessHours(
             open_time=time(9, 0),  # 9:00
             close_time=time(17, 0),  # 17:00
-        ) for day in DayOfWeek
+        )
+        for day in DayOfWeek
     }
 
     return RecommendSpots(
@@ -32,11 +41,11 @@ def _generate_sample_spots() -> RecommendSpots:
                             name="六甲山",
                             congestion=[1, 3, 4, 5] + [0] * 20,  # 0-23時の混雑度
                             business_hours=business_hours,
-                            price=500
+                            price=500,
                         ),
-                        selected=False
+                        selected=False,
                     )
-                ]
+                ],
             ),
             TimeSlotSpots(
                 time_slot=TimeSlot.AFTERNOON,
@@ -50,11 +59,11 @@ def _generate_sample_spots() -> RecommendSpots:
                             name="六甲山",
                             congestion=[1, 3, 4, 5] + [0] * 20,  # 0-23時の混雑度
                             business_hours=business_hours,
-                            price=500
+                            price=500,
                         ),
-                        selected=False
+                        selected=False,
                     )
-                ]
+                ],
             ),
             TimeSlotSpots(
                 time_slot=TimeSlot.NIGHT,
@@ -68,16 +77,19 @@ def _generate_sample_spots() -> RecommendSpots:
                             name="六甲山",
                             congestion=[1, 3, 4, 5] + [0] * 20,  # 0-23時の混雑度
                             business_hours=business_hours,
-                            price=500
+                            price=500,
                         ),
-                        selected=False
+                        selected=False,
                     )
-                ]
-            )
-        ]
+                ],
+            ),
+        ],
     )
 
-@router.post("/spot/pre_info", response_model=RecommendSpots, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/pre_info", response_model=RecommendSpots, status_code=status.HTTP_201_CREATED
+)
 async def spot_from_pre_info(
     input_data: RecommendSpotFromPreInfoRequest,
 ) -> RecommendSpots:
@@ -86,16 +98,3 @@ async def spot_from_pre_info(
     """
     # TODO: pre_infoからスポット情報を生成するロジックを実装
     return _generate_sample_spots()
-
-@router.post("/spot/chat", response_model=RecommendSpots, status_code=status.HTTP_201_CREATED)
-async def spot_from_chat(
-    input_data: RecommendSpotFromChatRequest,
-) -> RecommendSpots:
-    """
-    chatからスポット情報を生成するエンドポイント
-    """
-    # TODO: chatからスポット情報を生成するロジックを実装
-    return _generate_sample_spots()
-
-
-

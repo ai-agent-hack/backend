@@ -8,7 +8,6 @@ class UserBase(BaseModel):
 
     email: EmailStr
     username: str
-    full_name: Optional[str] = None
     is_active: bool = True
 
     @field_validator("username")
@@ -47,7 +46,6 @@ class FirebaseUserCreate(BaseModel):
 
     firebase_token: str
     username: str
-    full_name: Optional[str] = None
 
     @field_validator("username")
     @classmethod
@@ -75,7 +73,6 @@ class UserUpdate(BaseModel):
 
     email: Optional[EmailStr] = None
     username: Optional[str] = None
-    full_name: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -111,7 +108,6 @@ class UserInDB(UserBase):
 
     id: int
     firebase_uid: str
-    hashed_password: Optional[str] = None
     is_superuser: bool = False
     created_at: datetime
     updated_at: datetime

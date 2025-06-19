@@ -24,7 +24,6 @@ services:
             # - redis  # Uncomment when Redis is needed
         volumes:
             - ./app:/app/app
-            - ./key.json:/app/key.json
         env_file:
             - .env
         command:
