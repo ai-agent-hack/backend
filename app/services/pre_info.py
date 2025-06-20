@@ -27,8 +27,8 @@ class PreInfoService:
             raise ValidationError("여행 시작일은 오늘 이후여야 합니다")
 
         # 비즈니스 로직: 예산 검증
-        if pre_info_in.budget < 1000:
-            raise ValidationError("최소 예산은 1,000원 이상이어야 합니다")
+        if pre_info_in.budget < 10000:
+            raise ValidationError("최소 예산은 10,000원 이상이어야 합니다")
 
         return self.pre_info_repository.create_with_user(pre_info_in, user_id)
 
@@ -63,8 +63,8 @@ class PreInfoService:
                 raise ValidationError("여행 시작일은 종료일보다 이전이어야 합니다")
 
         # 비즈니스 로직: 예산 검증
-        if pre_info_update.budget is not None and pre_info_update.budget < 1000:
-            raise ValidationError("최소 예산은 1,000원 이상이어야 합니다")
+        if pre_info_update.budget is not None and pre_info_update.budget < 10000:
+            raise ValidationError("최소 예산은 10,000원 이상이어야 합니다")
 
         return self.pre_info_repository.update(pre_info, pre_info_update)
 

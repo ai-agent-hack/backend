@@ -1,13 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import Any
 
-from app.schemas.user import User, FirebaseUserCreate, FirebaseAuth, Token
+from app.schemas.user import (
+    User,
+    FirebaseUserCreate,
+    FirebaseAuth,
+    SessionLoginResponse,
+    LogoutResponse,
+)
 from app.services.user import UserService
-from app.core.dependencies import get_user_service, get_current_user_firebase
-from app.core.exceptions import UserAlreadyExistsError, ValidationError
-from app.core.security import create_access_token
-from app.core.config import settings
-from datetime import timedelta
+from app.core.dependencies import (
+    get_user_service,
+    get_current_user_firebase,
+    get_current_user_session,
+    get_current_user_flexible,
+)
+from app.core.exceptions import UserAlreadyExistsError, InvalidCredentialsError
 
 router = APIRouter()
 
@@ -35,67 +43,80 @@ async def firebase_signup(
     try:
         user = await user_service.create_firebase_user(firebase_user_create)
         return user
-    except ValidationError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except InvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="無効なFirebaseトークンです"
+        )
     except UserAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"User with {e.field} '{e.value}' already exists",
+            detail=f"{e.field} '{e.value}' のユーザーが既に存在します",
         )
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=User)
 async def firebase_login(
-    firebase_auth: FirebaseAuth,
-    user_service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user_firebase),
 ) -> Any:
     """
     Firebaseログインエンドポイント。
 
-    Firebaseトークンを検証してJWTトークンを返します。
+    Firebaseログイン後に受け取ったトークンでバックエンドユーザー情報を確認します。
 
     Args:
-        firebase_auth: Firebase認証データ
-        user_service: ユーザーサービス依存性
+        current_user: Firebaseトークンで認証された現在のユーザー
 
     Returns:
-        JWTアクセストークン
-
-    Raises:
-        HTTPException: 認証に失敗した場合
+        ユーザー情報と認証状態
     """
-    try:
-        user = await user_service.authenticate_firebase_user(
-            firebase_auth.firebase_token
-        )
+    return current_user
 
-        # JWT トークン生成
-        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            subject=user.username, expires_delta=access_token_expires
-        )
 
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-        }
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Firebase authentication failed",
-            headers={"WWW-Authenticate": "Firebase"},
-        )
+@router.post("/session-login", response_model=SessionLoginResponse)
+async def firebase_session_login(
+    request: Request,
+    current_user: User = Depends(get_current_user_firebase),
+) -> Any:
+    """
+    Firebaseセッションログインエンドポイント。
+
+    Firebaseトークンで認証後、セッションを作成して以降のAPI呼び出し時にトークン不要にします。
+
+    Args:
+        request: FastAPI request object
+        current_user: Firebaseトークンで認証された現在のユーザー
+
+    Returns:
+        ユーザー情報とセッション作成状態
+    """
+    # セッションにユーザーID保存
+    request.session["user_id"] = current_user.id
+    return SessionLoginResponse(
+        message="세션 로그인이 완료되었습니다", user=current_user, session_created=True
+    )
+
+
+@router.post("/logout", response_model=LogoutResponse)
+async def logout(request: Request) -> Any:
+    """
+    ログアウトエンドポイント - セッション削除
+
+    Returns:
+        ログアウト完了メッセージ
+    """
+    request.session.clear()
+    return LogoutResponse(message="로그아웃이 완료되었습니다")
 
 
 @router.get("/me", response_model=User)
 async def get_current_user_info(
-    current_user: User = Depends(get_current_user_firebase),
+    current_user: User = Depends(get_current_user_flexible),
 ) -> Any:
     """
-    Firebaseトークンで現在のユーザー情報を取得します。
+    現在のユーザー情報を取得します。（Firebaseトークンまたはセッション認証）
 
     Args:
-        current_user: 現在のユーザー（Firebaseトークンで認証済み）
+        current_user: 現在のユーザー（Firebaseトークンまたはセッションで認証済み）
 
     Returns:
         現在のユーザー情報

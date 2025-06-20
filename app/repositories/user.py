@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -100,31 +100,6 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
             .first()
         )
 
-    def create_user_with_hashed_password(
-        self, user_create: UserCreate, hashed_password: str
-    ) -> User:
-        """
-        Create user with pre-hashed password.
-
-        Args:
-            user_create: User creation data
-            hashed_password: Already hashed password
-
-        Returns:
-            Created user instance
-        """
-        user_data = user_create.dict()
-        user_data["hashed_password"] = hashed_password
-        # Remove plain password from data
-        if "password" in user_data:
-            del user_data["password"]
-
-        db_obj = User(**user_data)
-        self.db.add(db_obj)
-        self.db.commit()
-        self.db.refresh(db_obj)
-        return db_obj
-
     def create_firebase_user(
         self, firebase_uid: str, email: str, username: str
     ) -> User:
@@ -219,3 +194,37 @@ class UserRepository(BaseRepository[User, UserCreate, UserUpdate]):
             self.db.commit()
             self.db.refresh(user)
         return user
+
+    def get_users(
+        self, skip: int = 0, limit: int = 100, active_only: bool = False
+    ) -> List[User]:
+        """
+        Get list of users with pagination.
+
+        Args:
+            skip: Number of users to skip
+            limit: Maximum number of users to return
+            active_only: Whether to return only active users
+
+        Returns:
+            List of users
+        """
+        query = self.db.query(User)
+        if active_only:
+            query = query.filter(User.is_active == True)
+        return query.offset(skip).limit(limit).all()
+
+    def count_users(self, active_only: bool = False) -> int:
+        """
+        Count total number of users.
+
+        Args:
+            active_only: Whether to count only active users
+
+        Returns:
+            Number of users
+        """
+        query = self.db.query(User)
+        if active_only:
+            query = query.filter(User.is_active == True)
+        return query.count()

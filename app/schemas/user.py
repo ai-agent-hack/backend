@@ -28,17 +28,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for user creation requests."""
 
-    password: str
-
-    @field_validator("password")
-    @classmethod
-    def password_must_be_strong(cls, v):
-        """Validate password strength."""
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        if len(v) > 100:
-            raise ValueError("Password must be less than 100 characters")
-        return v
+    firebase_uid: str
 
 
 class FirebaseUserCreate(BaseModel):
@@ -71,10 +61,9 @@ class FirebaseAuth(BaseModel):
 class UserUpdate(BaseModel):
     """Schema for user update requests."""
 
-    email: Optional[EmailStr] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
-    is_active: Optional[bool] = None
+    email: EmailStr | None = None
+    username: str | None = None
+    is_active: bool | None = None
 
     @field_validator("username")
     @classmethod
@@ -89,17 +78,6 @@ class UserUpdate(BaseModel):
                 raise ValueError(
                     "Username can only contain letters, numbers, and underscores"
                 )
-        return v
-
-    @field_validator("password")
-    @classmethod
-    def password_must_be_strong(cls, v):
-        """Validate password strength if provided."""
-        if v is not None:
-            if len(v) < 8:
-                raise ValueError("Password must be at least 8 characters long")
-            if len(v) > 100:
-                raise ValueError("Password must be less than 100 characters")
         return v
 
 
@@ -127,21 +105,17 @@ class User(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserLogin(BaseModel):
-    """Schema for user login requests."""
+class SessionLoginResponse(BaseModel):
+    """세션 로그인 응답 스키마"""
 
-    username: str  # Can be username or email
-    password: str
+    message: str
+    user: User
+    session_created: bool
 
-
-class Token(BaseModel):
-    """Schema for authentication token response."""
-
-    access_token: str
-    token_type: str
+    model_config = ConfigDict(from_attributes=True)
 
 
-class TokenData(BaseModel):
-    """Schema for token payload data."""
+class LogoutResponse(BaseModel):
+    """로그아웃 응답 스키마"""
 
-    username: Optional[str] = None
+    message: str
