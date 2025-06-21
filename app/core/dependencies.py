@@ -9,6 +9,8 @@ from app.repositories.user import UserRepository
 from app.repositories.pre_info import PreInfoRepository
 from app.services.user import UserService
 from app.services.pre_info import PreInfoService
+from app.services.recommendation_service import RecommendationService
+from app.services.llm_service import LLMService
 from app.models.user import User
 from app.core.exceptions import UserNotFoundError
 
@@ -69,6 +71,31 @@ def get_pre_info_service(
         PreInfoService instance
     """
     return PreInfoService(pre_info_repository)
+
+
+def get_llm_service() -> LLMService:
+    """
+    Dependency to get LLM service instance.
+
+    Returns:
+        LLMService instance
+    """
+    return LLMService()
+
+
+def get_recommendation_service(
+    llm_service: LLMService = Depends(get_llm_service),
+) -> RecommendationService:
+    """
+    Dependency to get recommendation service instance.
+
+    Args:
+        llm_service: LLM service dependency
+
+    Returns:
+        RecommendationService instance
+    """
+    return RecommendationService()
 
 
 async def get_current_user_firebase(
