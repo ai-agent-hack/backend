@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Depends, HTTPException
 from datetime import time
 
 from app.schemas.spot import (
@@ -11,6 +11,8 @@ from app.schemas.spot import (
     BusinessHours,
     RecommendSpotFromPreInfoRequest,
 )
+from app.services.pre_info import PreInfoService
+from app.core.dependencies import get_pre_info_service
 
 router = APIRouter()
 
@@ -91,9 +93,31 @@ def _generate_sample_spots() -> RecommendSpots:
 )
 async def create_trip_seed_from_pre_info(
     input_data: RecommendSpotFromPreInfoRequest,
+    pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> RecommendSpots:
     """
     pre_infoからトリップのシードとなるスポット推薦を生成するエンドポイント
+    ※開発中のため認証不要
     """
-    # TODO: pre_infoからスポット情報を生成するロジックを実装
-    return _generate_sample_spots()
+    try:
+        # Step 1: DB에서 pre_info 데이터 가져오기
+        pre_info_id = int(input_data.pre_info_id)
+        pre_info = pre_info_service.pre_info_repository.get(pre_info_id)
+
+        if not pre_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"pre_info with id {pre_info_id} not found",
+            )
+
+        # TODO: Step 2 - 추천 서비스 호출
+        # recommend_spots = recommendation_service.recommend_spots_from_pre_info(pre_info)
+
+        # 현재는 샘플 데이터 반환 (나중에 실제 추천 로직으로 교체)
+        return _generate_sample_spots()
+
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="pre_info_id must be a valid integer",
+        )
