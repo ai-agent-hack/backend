@@ -1,22 +1,20 @@
-from typing import Optional, List
+from typing import List, Optional
 
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, FirebaseUserCreate
 from app.repositories.user import UserRepository
-from app.core.security import get_password_hash, verify_password
 from app.core.firebase import FirebaseService
 from app.core.exceptions import (
     UserAlreadyExistsError,
     UserNotFoundError,
     InvalidCredentialsError,
-    ValidationError,
 )
 
 
 class UserService:
     """
-    User service implementing business logic for user operations.
-    Follows Single Responsibility Principle - handles only user business logic.
+    User service for business logic operations.
+    Follows Single Responsibility Principle - only handles user business operations.
     """
 
     def __init__(
@@ -24,13 +22,6 @@ class UserService:
         user_repository: UserRepository,
         firebase_service: Optional[FirebaseService] = None,
     ):
-        """
-        Initialize user service with repository dependency.
-
-        Args:
-            user_repository: User repository for data access
-            firebase_service: Firebase service for authentication
-        """
         self.user_repository = user_repository
         self.firebase_service = firebase_service
 
@@ -38,44 +29,46 @@ class UserService:
         self, firebase_user_create: FirebaseUserCreate
     ) -> User:
         """
-        Create a new user from Firebase authentication.
+        Create a Firebase user after verifying Firebase token.
 
         Args:
-            firebase_user_create: Firebase user creation data
+            firebase_user_create: Firebase user creation data with token
 
         Returns:
             Created user instance
 
         Raises:
-            ValidationError: If Firebase token is invalid
-            UserAlreadyExistsError: If username already exists
+            InvalidCredentialsError: If Firebase token is invalid
+            UserAlreadyExistsError: If user already exists
         """
         if not self.firebase_service:
-            raise ValidationError("Firebase service not initialized")
+            raise InvalidCredentialsError()
 
-        # Verify Firebase token
+        # Verify Firebase token first
         decoded_token = await self.firebase_service.verify_id_token(
             firebase_user_create.firebase_token
         )
         if not decoded_token:
-            raise ValidationError("Invalid Firebase token")
+            raise InvalidCredentialsError()
 
         firebase_uid = decoded_token["uid"]
         email = decoded_token.get("email")
 
         if not email:
-            raise ValidationError("Email not found in Firebase token")
+            raise InvalidCredentialsError()
 
-        # Check if user already exists with this Firebase UID
+        # Check if user already exists
         existing_user = self.user_repository.get_by_firebase_uid(firebase_uid)
         if existing_user:
-            return existing_user  # Return existing user instead of error
+            raise UserAlreadyExistsError("firebase_uid", firebase_uid)
 
-        # Business logic: Check for duplicate username
+        if self.user_repository.email_exists(email):
+            raise UserAlreadyExistsError("email", email)
+
         if self.user_repository.username_exists(firebase_user_create.username):
             raise UserAlreadyExistsError("username", firebase_user_create.username)
 
-        # Create user with Firebase data
+        # Create user with Firebase UID
         return self.user_repository.create_firebase_user(
             firebase_uid=firebase_uid,
             email=email,
@@ -132,43 +125,12 @@ class UserService:
         if self.user_repository.username_exists(user_create.username):
             raise UserAlreadyExistsError("username", user_create.username)
 
-        # Hash the password before storing
-        hashed_password = get_password_hash(user_create.password)
-
-        return self.user_repository.create_user_with_hashed_password(
-            user_create, hashed_password
+        # Create Firebase user (no password needed)
+        return self.user_repository.create_firebase_user(
+            firebase_uid=user_create.firebase_uid,
+            email=user_create.email,
+            username=user_create.username,
         )
-
-    def authenticate_user(self, username: str, password: str) -> User:
-        """
-        Authenticate user with username and password.
-
-        Args:
-            username: Username or email
-            password: Plain text password
-
-        Returns:
-            Authenticated user instance
-
-        Raises:
-            InvalidCredentialsError: If authentication fails
-        """
-        # Try to find user by username first, then by email
-        user = self.user_repository.get_active_user_by_username(username)
-        if not user:
-            user = self.user_repository.get_active_user_by_email(username)
-
-        if not user:
-            raise InvalidCredentialsError()
-
-        # Skip password verification for Firebase users (no hashed_password)
-        if user.hashed_password is None:
-            raise InvalidCredentialsError()
-
-        if not verify_password(password, user.hashed_password):
-            raise InvalidCredentialsError()
-
-        return user
 
     def get_user_by_id(self, user_id: int) -> User:
         """
@@ -271,16 +233,6 @@ class UserService:
             if self.user_repository.username_exists(user_update.username):
                 raise UserAlreadyExistsError("username", user_update.username)
 
-        # Hash password if being updated (only for non-Firebase users)
-        if user_update.password and user.hashed_password is not None:
-            # Create a copy of the update data
-            update_data = user_update.dict(exclude_unset=True)
-            update_data["hashed_password"] = get_password_hash(user_update.password)
-            del update_data["password"]
-
-            # Create new UserUpdate instance without password
-            user_update = UserUpdate(**update_data)
-
         return self.user_repository.update(user, user_update)
 
     def deactivate_user(self, user_id: int) -> User:
@@ -346,12 +298,9 @@ class UserService:
             active_only: Whether to return only active users
 
         Returns:
-            List of user instances
+            List of users
         """
-        users = self.user_repository.get_multi(skip=skip, limit=limit)
-        if active_only:
-            users = [user for user in users if user.is_active]
-        return users
+        return self.user_repository.get_users(skip, limit, active_only)
 
     def count_users(self, active_only: bool = False) -> int:
         """
@@ -361,9 +310,6 @@ class UserService:
             active_only: Whether to count only active users
 
         Returns:
-            Total number of users
+            Number of users
         """
-        # This is a simple implementation - in a real app, you'd want
-        # to implement this in the repository for better performance
-        users = self.get_users(skip=0, limit=10000, active_only=active_only)
-        return len(users)
+        return self.user_repository.count_users(active_only)

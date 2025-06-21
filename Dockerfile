@@ -26,11 +26,14 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-# Copy application code
+# Copy application code and scripts
 COPY ./app /app/app
+COPY ./scripts/run_migrations.sh /app/run_migrations.sh
+COPY ./alembic /app/alembic
+COPY ./alembic.ini /app/alembic.ini
 
-# Change ownership to non-root user
-RUN chown -R fastapi:fastapi /app
+# Make script executable and change ownership to non-root user
+RUN chmod +x /app/run_migrations.sh && chown -R fastapi:fastapi /app
 USER fastapi
 
 # Health check

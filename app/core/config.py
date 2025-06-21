@@ -11,10 +11,11 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
 
-    # JWT Settings
-    SECRET_KEY: str = "your-secret-key-change-this-in-production-please"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
-    ALGORITHM: str = "HS256"
+    # Session settings
+    SESSION_SECRET_KEY: str = (
+        "your-super-secret-session-key-change-in-production-minimum-32-characters"
+    )
+    SESSION_MAX_AGE: int = 24 * 60 * 60  # 24 hours in seconds
 
     # GCP Cloud SQL Database Settings
     DB_USER: str = "postgres"
