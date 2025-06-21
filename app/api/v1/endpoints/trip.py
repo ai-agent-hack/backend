@@ -9,7 +9,6 @@ from app.schemas.spot import (
     TimeSlot,
     DayOfWeek,
     BusinessHours,
-    RecommendSpotFromChatRequest,
     RecommendSpotFromPreInfoRequest,
 )
 
@@ -88,13 +87,13 @@ def _generate_sample_spots() -> RecommendSpots:
 
 
 @router.post(
-    "/pre_info", response_model=RecommendSpots, status_code=status.HTTP_201_CREATED
+    "/seed", response_model=RecommendSpots, status_code=status.HTTP_201_CREATED
 )
-async def spot_from_pre_info(
+async def create_trip_seed_from_pre_info(
     input_data: RecommendSpotFromPreInfoRequest,
 ) -> RecommendSpots:
     """
-    pre_infoからスポット情報を生成するエンドポイント
+    pre_infoからトリップのシードとなるスポット推薦を生成するエンドポイント
     """
     # TODO: pre_infoからスポット情報を生成するロジックを実装
     return _generate_sample_spots()
