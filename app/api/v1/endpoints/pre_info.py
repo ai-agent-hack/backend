@@ -23,7 +23,7 @@ async def register_pre_info(
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
-    여행지 사전정보를 등록
+    旅行先事前情報を登録
     """
     try:
         pre_info = pre_info_service.create_pre_info(input_data, current_user.id)
@@ -46,7 +46,7 @@ async def register_pre_info_test(
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
-    여행지 사전정보를 등록 (테스트용 - Firebase 토큰 불필요)
+    旅行先事前情報を登録（テスト用 - Firebaseトークン不要）
     """
     try:
         pre_info = pre_info_service.create_pre_info(input_data, current_user.id)
@@ -59,13 +59,13 @@ async def register_pre_info_test(
 
 @router.get("/", response_model=List[PreInfoResponse])
 async def get_my_pre_infos(
-    skip: int = Query(0, ge=0, description="건너뛸 항목 수"),
-    limit: int = Query(100, ge=1, le=1000, description="가져올 항목 수"),
+    skip: int = Query(0, ge=0, description="スキップする項目数"),
+    limit: int = Query(100, ge=1, le=1000, description="取得する項目数"),
     current_user: User = Depends(get_current_user_firebase),
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> List[PreInfoResponse]:
     """
-    내 여행 사전정보 목록 조회
+    私の旅行事前情報一覧取得
     """
     pre_infos = pre_info_service.get_user_pre_infos(current_user.id, skip, limit)
     return [PreInfoResponse.model_validate(pre_info) for pre_info in pre_infos]
@@ -78,7 +78,7 @@ async def get_pre_info(
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
-    내 특정 여행 사전정보 조회
+    私の特定旅行事前情報取得
     """
     try:
         pre_info = pre_info_service.get_pre_info_by_id(pre_info_id, current_user.id)
@@ -95,7 +95,7 @@ async def update_pre_info(
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
-    내 여행 사전정보 수정
+    私の旅行事前情報修正
     """
     try:
         pre_info = pre_info_service.update_pre_info(
@@ -117,7 +117,7 @@ async def delete_pre_info(
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
-    내 여행 사전정보 삭제
+    私の旅行事前情報削除
     """
     try:
         deleted_pre_info = pre_info_service.delete_pre_info(
