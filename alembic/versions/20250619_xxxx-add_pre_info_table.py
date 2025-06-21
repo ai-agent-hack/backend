@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "add_pre_info_001"
-down_revision = "fdba04d79a97"
+down_revision = "make_firebase_uid_required"
 branch_labels = None
 depends_on = None
 

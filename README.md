@@ -149,7 +149,7 @@ docker run -p 8000:8000 \
 alembic revision --autogenerate -m "変更内容の説明"
 
 # マイグレーションの適用
-alembic upgrade head
+docker-compose exec fastapi alembic upgrade
 
 # 前のマイグレーションにダウングレード
 alembic downgrade -1
