@@ -54,33 +54,28 @@ cp .env.example .env
 vim .env
 ```
 
-主な設定項目：
+### 3. Dockerで起動
+```bash
+# 全サービス起動
+docker-compose up --build
 
-```env
-# アプリケーション
-PROJECT_NAME=FastAPI Backend with SOLID Principles
-ENVIRONMENT=development
-SECRET_KEY=your-super-secret-key
+# 特定サービスのみ起動 （今はつかはない）
+docker-compose up fastapi postgres redis
 
-FIREBASE_SERVICE_ACCOUNT_JSON='{
-}'
-
-GOOGLE_APPLICATION_CREDENTIALS='{
-}'
-
-GOOGLE_MAP_API=
-
-# データベース（ローカルPostgreSQL）
-DB_USER=postgres
-DB_PASSWORD=password
-DB_NAME=fastapi_db
-DB_HOST=localhost
-DB_PORT=5432
-
-# データベース（GCP Cloud SQL）
-CLOUD_SQL_CONNECTION_NAME=your-project:region:instance
-GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+# GCP Cloud SQL Proxy有効化で起動 （今はつかはない）
+docker-compose --profile gcp up
 ```
+
+> **⚠️ 注意**
+> 
+> migrationできていなくてエラーが出る際は以下のコマンドを実行してください：
+> 
+> ```bash
+> # DBマイグレーションの実行
+> docker-compose exec fastapi alembic upgrade head
+> ```
+
+## オプションセットアップ
 
 ### 3. データベースセットアップ
 
@@ -120,7 +115,7 @@ API は以下で利用可能です：
 
 ```bash
 # 全サービス起動
-docker-compose up
+docker-compose up --build
 
 # 特定サービスのみ起動 今つかはない)
 docker-compose up fastapi postgres redis
