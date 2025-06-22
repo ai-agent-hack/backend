@@ -16,4 +16,5 @@ google-cloud-aiplatform==1.97.0
 google-auth==2.23.4
 itsdangerous==2.1.2
 pytrends==4.9.2
+googlemaps==4.10.0
 # redis==5.0.1  # Uncomment when Redis caching is needed 

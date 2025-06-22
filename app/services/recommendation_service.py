@@ -6,6 +6,7 @@ from app.models.pre_info import PreInfo
 from app.schemas.spot import RecommendSpots
 from app.services.llm_service import LLMService
 from app.services.google_trends_service import GoogleTrendsService
+from app.services.places_service import PlacesService
 
 
 class RecommendationService:
@@ -28,8 +29,12 @@ class RecommendationService:
             self.google_trends_service = GoogleTrendsService()
             print("✅ GoogleTrendsService初期化完了")
 
+            # Placesサービス初期化
+            print("🗺️ PlacesService初期化中...")
+            self.places_service = PlacesService()
+            print("✅ PlacesService初期化完了")
+
             # TODO: 他のサービス依存性注入
-            # self.places_service = places_service
             # self.vector_search_service = vector_search_service
             # self.scoring_service = scoring_service
 
@@ -40,6 +45,7 @@ class RecommendationService:
             # 初期化失敗してもサービスは継続実行
             self.llm_service = None
             self.google_trends_service = None
+            self.places_service = None
 
     async def recommend_spots_from_pre_info(self, pre_info: PreInfo) -> Dict[str, Any]:
         """
@@ -164,28 +170,79 @@ class RecommendationService:
     async def _search_places_by_keywords(
         self, keywords: List[str], pre_info: PreInfo
     ) -> List[str]:
-        """Step 3-3: Places Text Searchで場所ID収集"""
-        # TODO: Placesサービス呼び出し
-        # place_ids = []
-        # for keyword in keywords:
-        #     ids = await self.places_service.text_search(keyword, pre_info.region)
-        #     place_ids.extend(ids)
-        # return place_ids
+        """Step 3-3: Places Text Searchで場所ID収集 (実際の実装!)"""
+        if self.places_service is None:
+            print("⚠️ PlacesServiceなし。フォールバック使用")
+            print(f"🔍 フォールバック - ダミーplace_id生成: {keywords}")
+            return [f"fallback_place_{i}" for i in range(20)]
 
-        # 仮ダミーデータ
-        print(f"🔍 Places検索キーワード: {keywords}")
-        return [f"place_id_{i}" for i in range(20)]
+        try:
+            all_place_ids = []
+            print(f"🔍 Places Text Search開始: {len(keywords)}個キーワード")
+
+            # 各キーワードで検索実行
+            for keyword in keywords:
+                place_ids = await self.places_service.text_search(
+                    keyword, pre_info.region
+                )
+                all_place_ids.extend(place_ids)
+                print(f"  ✅ '{keyword}': {len(place_ids)}個発見")
+
+            # 重複削除
+            unique_place_ids = list(set(all_place_ids))
+            print(f"🎯 重複削除後: {len(unique_place_ids)}個のユニークplace_id")
+
+            return unique_place_ids
+
+        except Exception as e:
+            print(f"❌ Places Text Search失敗: {str(e)}")
+            # フォールバック
+            return [f"error_place_{i}" for i in range(10)]
 
     async def _get_place_details(self, place_ids: List[str]) -> List[Dict[str, Any]]:
-        """Step 3-4: Places Detailsで詳細情報取得"""
-        # TODO: Placesサービス呼び出し
-        # return await self.places_service.get_place_details_batch(place_ids)
+        """Step 3-4: Places Detailsで詳細情報取得 (実際の実装!)"""
+        if self.places_service is None:
+            print("⚠️ PlacesServiceなし。フォールバック使用")
+            print(f"📍 フォールバック - ダミー詳細情報生成: {len(place_ids)}個")
+            return [
+                {
+                    "place_id": pid,
+                    "name": f"場所_{i+1}",
+                    "rating": 4.0 + (i % 5) * 0.2,
+                    "address": "住所情報なし",
+                    "lat": 35.6762 + (i * 0.01),
+                    "lng": 139.6503 + (i * 0.01),
+                    "price_level": (i % 4) + 1,
+                    "types": ["establishment"],
+                }
+                for i, pid in enumerate(place_ids[:20])
+            ]
 
-        # 仮ダミーデータ
-        print(f"📍 Places詳細情報照会: {len(place_ids)}個")
-        return [
-            {"place_id": pid, "name": f"場所_{pid}", "rating": 4.5} for pid in place_ids
-        ]
+        try:
+            print(f"📍 Places Details一括取得開始: {len(place_ids)}個")
+
+            # Places API로 상세 정보 취득
+            place_details = await self.places_service.get_place_details_batch(place_ids)
+
+            print(f"✅ Places Details取得完了: {len(place_details)}個")
+            return place_details
+
+        except Exception as e:
+            print(f"❌ Places Details取得失敗: {str(e)}")
+            # フォールバック
+            return [
+                {
+                    "place_id": pid,
+                    "name": f"エラー場所_{i+1}",
+                    "rating": 3.5,
+                    "address": "詳細情報取得失敗",
+                    "lat": 35.6762,
+                    "lng": 139.6503,
+                    "price_level": 2,
+                    "types": ["establishment"],
+                }
+                for i, pid in enumerate(place_ids[:10])
+            ]
 
     async def _vector_search_similarity(
         self, pre_info: PreInfo, places: List[Dict[str, Any]]
@@ -220,11 +277,70 @@ class RecommendationService:
     async def _final_scoring_and_ranking(
         self, spots: List[Dict[str, Any]], weights: Dict[str, float], pre_info: PreInfo
     ) -> List[Dict[str, Any]]:
-        """Step 3-7: 最終スコアリングでTOP-N選別"""
+        """Step 3-7: 最終スコアリングでTOP-N選別とAPI스키마 변환"""
         # TODO: Scoringサービス呼び出し
         # return await self.scoring_service.score_and_rank(spots, weights, pre_info, top_n=10)
 
         # 仮：上位10個選択
-        result = spots[:10] if len(spots) >= 10 else spots
-        print(f"🏆 最終スコアリング: {len(result)}個選別")
-        return result
+        top_spots = spots[:10] if len(spots) >= 10 else spots
+        print(f"🏆 最終スコアリング: {len(top_spots)}個選別")
+
+        # API 스키마에 맞게 TimeSlotSpots 형식으로 변환
+        formatted_spots = []
+
+        # 스포트들을 3개 시간대로 분배 (단순 분배)
+        spots_per_slot = len(top_spots) // 3 + (1 if len(top_spots) % 3 > 0 else 0)
+
+        time_slots = ["午前", "午後", "夜"]
+        for i, time_slot in enumerate(time_slots):
+            start_idx = i * spots_per_slot
+            end_idx = min((i + 1) * spots_per_slot, len(top_spots))
+            slot_spots = top_spots[start_idx:end_idx]
+
+            if slot_spots:  # 해당 시간대에 스포트가 있는 경우만 추가
+                formatted_spots.append(
+                    {
+                        "time_slot": time_slot,
+                        "spots": [
+                            self._convert_to_spot_schema(spot, idx)
+                            for idx, spot in enumerate(slot_spots)
+                        ],
+                    }
+                )
+
+        print(f"📋 시간대별 분배 완료: {len(formatted_spots)}개 시간대")
+        return formatted_spots
+
+    def _convert_to_spot_schema(
+        self, place_data: Dict[str, Any], index: int
+    ) -> Dict[str, Any]:
+        """Places API 데이터를 Spot 스키마로 변환"""
+        # 기본 영업시간 생성 (실제로는 opening_hours 파싱 필요)
+        business_hours = {
+            "MONDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+            "TUESDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+            "WEDNESDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+            "THURSDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+            "FRIDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+            "SATURDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+            "SUNDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+            "HOLIDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
+        }
+
+        # 기본 혼잡도 데이터 (0-23시간)
+        congestion = [30 + (i * 5) % 70 for i in range(24)]  # 시간별 혼잡도 모의
+
+        return {
+            "spot_id": place_data.get("place_id", f"spot_{index}"),
+            "longitude": place_data.get("lng", 0.0),
+            "latitude": place_data.get("lat", 0.0),
+            "recommendation_reason": f"{place_data.get('name', '장소')}는 평점 {place_data.get('rating', 0.0)}으로 추천합니다.",
+            "details": {
+                "name": place_data.get("name", f"장소_{index}"),
+                "congestion": congestion,
+                "business_hours": business_hours,
+                "price": place_data.get("price_level", 2)
+                * 1000,  # price_level을 원화로 변환
+            },
+            "selected": False,
+        }

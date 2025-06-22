@@ -117,21 +117,6 @@ async def create_trip_seed_from_pre_info(
             await recommendation_service.recommend_spots_from_pre_info(pre_info)
         )
 
-        # 실제 추천 결과에 디버깅 정보 추가하여 반환
-        sample_spots = _generate_sample_spots()
-
-        # 현재는 샘플 데이터에 실제 메타데이터를 추가
-        enhanced_response = {
-            **sample_spots.model_dump(),
-            "rec_spot_id": recommendation_result.get("rec_spot_id"),
-            "processing_time_ms": recommendation_result.get("processing_time_ms"),
-            "api_calls_made": recommendation_result.get("api_calls_made"),
-            "total_spots_found": recommendation_result.get("total_spots_found"),
-            "scoring_weights": recommendation_result.get("scoring_weights"),
-            "keywords_generated": recommendation_result.get("keywords_generated"),
-            "initial_weights": recommendation_result.get("initial_weights"),
-        }
-
         print(f"🎯 최종 응답 메타데이터:")
         print(f"  - Keywords: {recommendation_result.get('keywords_generated')}")
         print(f"  - Weights: {recommendation_result.get('initial_weights')}")
@@ -139,15 +124,29 @@ async def create_trip_seed_from_pre_info(
             f"  - Processing time: {recommendation_result.get('processing_time_ms')}ms"
         )
         print(f"  - API calls: {recommendation_result.get('api_calls_made')}")
-
-        # TODO: 나중에는 sample_spots 대신 실제 recommend_spots 반환
-        return RecommendSpots(
-            **{
-                k: v
-                for k, v in enhanced_response.items()
-                if k in ["recommend_spot_id", "recommend_spots"]
-            }
+        print(
+            f"  - Final spots: {len(recommendation_result.get('recommend_spots', []))}"
         )
+
+        # 실제 추천 결과를 적절한 형식으로 변환
+        actual_spots = recommendation_result.get("recommend_spots", [])
+
+        # 임시로 샘플 형식으로 변환 (실제 데이터 구조 확인용)
+        print(f"📍 실제 생성된 스포트 데이터:")
+        for i, spot in enumerate(actual_spots[:3]):  # 처음 3개만 로그 출력
+            print(f"  Spot {i+1}: {spot}")
+
+        # 실제 추천 결과 반환 (일단 원본 데이터 구조로)
+        return {
+            "recommend_spot_id": recommendation_result.get("rec_spot_id", "unknown"),
+            "recommend_spots": actual_spots,
+            "processing_time_ms": recommendation_result.get("processing_time_ms"),
+            "api_calls_made": recommendation_result.get("api_calls_made"),
+            "total_spots_found": recommendation_result.get("total_spots_found"),
+            "scoring_weights": recommendation_result.get("scoring_weights"),
+            "keywords_generated": recommendation_result.get("keywords_generated"),
+            "initial_weights": recommendation_result.get("initial_weights"),
+        }
 
     except ValueError:
         raise HTTPException(
