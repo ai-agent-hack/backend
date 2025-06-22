@@ -5,6 +5,7 @@ from datetime import datetime
 from app.models.pre_info import PreInfo
 from app.schemas.spot import RecommendSpots
 from app.services.llm_service import LLMService
+from app.services.google_trends_service import GoogleTrendsService
 
 
 class RecommendationService:
@@ -22,8 +23,12 @@ class RecommendationService:
             self.llm_service = LLMService()
             print("✅ LLMService初期化完了")
 
+            # Google Trendsサービス初期化
+            print("🔥 GoogleTrendsService初期化中...")
+            self.google_trends_service = GoogleTrendsService()
+            print("✅ GoogleTrendsService初期化完了")
+
             # TODO: 他のサービス依存性注入
-            # self.google_trends_service = google_trends_service
             # self.places_service = places_service
             # self.vector_search_service = vector_search_service
             # self.scoring_service = scoring_service
@@ -34,6 +39,7 @@ class RecommendationService:
             print(f"❌ RecommendationService初期化失敗: {str(e)}")
             # 初期化失敗してもサービスは継続実行
             self.llm_service = None
+            self.google_trends_service = None
 
     async def recommend_spots_from_pre_info(self, pre_info: PreInfo) -> Dict[str, Any]:
         """
@@ -59,7 +65,7 @@ class RecommendationService:
             )
             processing_metadata["api_calls_made"] += 1
 
-            # Step 3-2: Google Trendsフィルタリング
+            # Step 3-2: Google Trendsフィルタリング (実際の実装!)
             hot_keywords = await self._filter_trending_keywords(keywords)
             processing_metadata["api_calls_made"] += len(keywords)
 
@@ -93,9 +99,10 @@ class RecommendationService:
             # 処理時間計算
             processing_time_ms = int((time.time() - start_time) * 1000)
 
-            # サフィン メタデータ ログ 出力
+            # 最終メタデータログ出力
             print("🎯 最終レスポンスメタデータ:")
             print(f"  - Keywords: {keywords}")
+            print(f"  - Hot Keywords: {hot_keywords}")
             print(f"  - Weights: {updated_weights}")
             print(f"  - Processing time: {processing_time_ms}ms")
             print(f"  - API calls: {processing_metadata['api_calls_made']}")
@@ -105,6 +112,7 @@ class RecommendationService:
                 "recommend_spots": final_recommendations,
                 "processing_time_ms": processing_time_ms,
                 "keywords_generated": keywords,  # デバッグ用追加
+                "hot_keywords": hot_keywords,  # トレンディングキーワード追加
                 "initial_weights": initial_weights,  # デバッグ用追加
                 **processing_metadata,
             }
@@ -139,13 +147,19 @@ class RecommendationService:
         return await self.llm_service.generate_keywords_and_weights(pre_info)
 
     async def _filter_trending_keywords(self, keywords: List[str]) -> List[str]:
-        """Step 3-2: Google Trendsで人気キーワードフィルタリング"""
-        # TODO: Google Trendsサービス呼び出し
-        # return await self.google_trends_service.filter_hot_keywords(keywords)
+        """Step 3-2: Google Trendsで人気キーワードフィルタリング (実際の実装!)"""
+        if self.google_trends_service is None:
+            print("⚠️ GoogleTrendsServiceなし。フォールバック使用")
+            print(f"🔥 フォールバック - 全キーワード使用: {keywords}")
+            return keywords
 
-        # 仮：全キーワードが人気と仮定
-        print(f"🔥 トレンディングキーワードフィルタリング: {keywords}")
-        return keywords
+        # 実際のGoogle Trends APIを使用してキーワードフィルタリング
+        trending_keywords = await self.google_trends_service.filter_trending_keywords(
+            keywords, threshold=30  # 人気度30以上のキーワードのみ
+        )
+
+        print(f"🔥 Google Trendsフィルタリング完了: {trending_keywords}")
+        return trending_keywords
 
     async def _search_places_by_keywords(
         self, keywords: List[str], pre_info: PreInfo
