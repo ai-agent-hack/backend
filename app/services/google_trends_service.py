@@ -48,9 +48,9 @@ class GoogleTrendsService:
                     # API制限を避けるため少し待機
                     time.sleep(1)
 
-                    # 過去30日間のトレンド取得
+                    # 過去90日間のトレンド取得
                     self.pytrends.build_payload(
-                        [keyword], timeframe="today 1-m", geo=""
+                        [keyword], timeframe="today 3-m", geo=""
                     )
 
                     # 時系列データ取得
