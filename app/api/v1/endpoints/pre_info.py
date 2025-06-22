@@ -6,7 +6,7 @@ from app.services.pre_info import PreInfoService
 from app.models.user import User
 from app.core.dependencies import (
     get_pre_info_service,
-    get_current_user_firebase,
+    get_current_user_flexible,
     get_current_user_test,
 )
 from app.core.exceptions import ValidationError, NotFoundError
@@ -19,7 +19,7 @@ router = APIRouter()
 )
 async def register_pre_info(
     input_data: PreInfoRequest,
-    current_user: User = Depends(get_current_user_firebase),
+    current_user: User = Depends(get_current_user_flexible),
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
@@ -61,7 +61,7 @@ async def register_pre_info_test(
 async def get_my_pre_infos(
     skip: int = Query(0, ge=0, description="スキップする項目数"),
     limit: int = Query(100, ge=1, le=1000, description="取得する項目数"),
-    current_user: User = Depends(get_current_user_firebase),
+    current_user: User = Depends(get_current_user_flexible),
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> List[PreInfoResponse]:
     """
@@ -74,7 +74,7 @@ async def get_my_pre_infos(
 @router.get("/{pre_info_id}", response_model=PreInfoResponse)
 async def get_pre_info(
     pre_info_id: int,
-    current_user: User = Depends(get_current_user_firebase),
+    current_user: User = Depends(get_current_user_flexible),
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
@@ -91,7 +91,7 @@ async def get_pre_info(
 async def update_pre_info(
     pre_info_id: int,
     update_data: PreInfoUpdate,
-    current_user: User = Depends(get_current_user_firebase),
+    current_user: User = Depends(get_current_user_flexible),
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
@@ -113,7 +113,7 @@ async def update_pre_info(
 @router.delete("/{pre_info_id}", response_model=PreInfoResponse)
 async def delete_pre_info(
     pre_info_id: int,
-    current_user: User = Depends(get_current_user_firebase),
+    current_user: User = Depends(get_current_user_flexible),
     pre_info_service: PreInfoService = Depends(get_pre_info_service),
 ) -> PreInfoResponse:
     """
