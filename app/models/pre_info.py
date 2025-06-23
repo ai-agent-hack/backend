@@ -23,6 +23,9 @@ class PreInfo(Base):
     end_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     atmosphere: Mapped[str] = mapped_column(Text, nullable=False)
     budget: Mapped[int] = mapped_column(Integer, nullable=False)
+    participants_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="2"
+    )
     region: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(

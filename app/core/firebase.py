@@ -12,7 +12,7 @@ class FirebaseService:
     def __init__(self):
         if not firebase_admin._apps:
             try:
-                # 방법 1: JSON 전체를 환경변수에서 읽기
+                # 方法1: JSON全体を環境変数から読み込み
                 firebase_service_account_json = os.getenv(
                     "FIREBASE_SERVICE_ACCOUNT_JSON"
                 ) or os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
@@ -29,7 +29,7 @@ class FirebaseService:
                     except json.JSONDecodeError as e:
                         print(f"Error parsing Firebase service account JSON: {e}")
 
-                # 모든 방법 실패
+                # すべての方法が失敗
                 print(
                     "Warning: Firebase service account key not found in any location:"
                 )
@@ -51,7 +51,7 @@ class FirebaseService:
 
     async def verify_id_token(self, id_token: str) -> Optional[dict]:
         """
-        Firebase ID 토큰을 검증하고 사용자 정보를 반환합니다.
+        Firebase IDトークンを検証してユーザー情報を返します。
 
         Args:
             id_token: Firebase ID token
@@ -72,7 +72,7 @@ class FirebaseService:
 
     async def get_user_by_uid(self, uid: str) -> Optional[dict]:
         """
-        UID로 Firebase 사용자 정보를 가져옵니다.
+        UIDでFirebaseユーザー情報を取得します。
 
         Args:
             uid: Firebase user UID
@@ -103,5 +103,5 @@ firebase_service = FirebaseService()
 
 
 def get_firebase_service() -> FirebaseService:
-    """Firebase 서비스 인스턴스를 반환합니다."""
+    """Firebaseサービスインスタンスを返します。"""
     return firebase_service

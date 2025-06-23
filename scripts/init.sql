@@ -1,15 +1,15 @@
--- Database initialization script for FastAPI backend
--- This script creates necessary extensions and initial data
+-- FastAPIバックエンド用データベース初期化スクリプト
+-- このスクリプトは必要な拡張機能と初期データを作成します
 
--- Create extensions
+-- 拡張機能を作成
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
--- Create indexes for better performance (will be created by SQLAlchemy migrations)
--- This is just for reference
+-- パフォーマンス向上のためのインデックス作成（SQLAlchemyマイグレーションで作成されます）
+-- これは参考用です
 
--- Insert initial superuser (optional - can be done via API)
--- Password is 'admin123' hashed with bcrypt
+-- 初期スーパーユーザーを挿入（オプション - API経由でも可能）
+-- パスワードは'admin123'をbcryptでハッシュ化
 -- INSERT INTO users (email, username, hashed_password, is_active, is_superuser, full_name, created_at, updated_at)
 -- VALUES (
 --     'admin@example.com',
@@ -22,7 +22,7 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 --     NOW()
 -- );
 
--- Create function to automatically update updated_at timestamp
+-- updated_atタイムスタンプを自動更新する関数を作成
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -31,6 +31,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- This trigger will be applied to tables by SQLAlchemy migrations
+-- このトリガーはSQLAlchemyマイグレーションでテーブルに適用されます
 -- CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
 --     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column(); 

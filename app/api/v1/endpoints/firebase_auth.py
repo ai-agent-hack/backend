@@ -92,7 +92,7 @@ async def firebase_session_login(
     # セッションにユーザーID保存
     request.session["user_id"] = current_user.id
     return SessionLoginResponse(
-        message="세션 로그인이 완료되었습니다", user=current_user, session_created=True
+        message="セッションログインが完了しました", user=current_user, session_created=True
     )
 
 
@@ -105,7 +105,7 @@ async def logout(request: Request) -> Any:
         ログアウト完了メッセージ
     """
     request.session.clear()
-    return LogoutResponse(message="로그아웃이 완료되었습니다")
+    return LogoutResponse(message="ログアウトが完了しました")
 
 
 @router.get("/me", response_model=User)

@@ -18,15 +18,15 @@ class PreInfoService:
 
     def create_pre_info(self, pre_info_in: PreInfoRequest, user_id: int) -> PreInfo:
         """旅行事前情報の作成"""
-        # 비즈니스 로직: 날짜 유효성 검증
+        # ビジネスロジック: 日付有効性検証
         if pre_info_in.start_date >= pre_info_in.end_date:
             raise ValidationError("旅行開始日は終了日より前である必要があります")
 
-        # 비즈니스 로직: 과거 날짜 검증
+        # ビジネスロジック: 過去日付検証
         if pre_info_in.start_date.date() < datetime.now().date():
             raise ValidationError("旅行開始日は今日以降である必要があります")
 
-        # 비즈니스 로직: 예산 검증
+        # ビジネスロジック: 予算検証
         if pre_info_in.budget < 10000:
             raise ValidationError("最低予算は10,000円以上である必要があります")
 
@@ -51,7 +51,7 @@ class PreInfoService:
         """旅行事前情報の修正（本人のみ）"""
         pre_info = self.get_pre_info_by_id(pre_info_id, user_id)
 
-        # 비즈니스 로직: 날짜 유효성 검증
+        # ビジネスロジック: 日付有効性検証
         if pre_info_update.start_date and pre_info_update.end_date:
             if pre_info_update.start_date >= pre_info_update.end_date:
                 raise ValidationError("旅行開始日は終了日より前である必要があります")
@@ -62,7 +62,7 @@ class PreInfoService:
             if pre_info.start_date >= pre_info_update.end_date:
                 raise ValidationError("旅行開始日は終了日より前である必要があります")
 
-        # 비즈니스 로직: 예산 검증
+        # ビジネスロジック: 予算検証
         if pre_info_update.budget is not None and pre_info_update.budget < 10000:
             raise ValidationError("最低予算は10,000円以上である必要があります")
 

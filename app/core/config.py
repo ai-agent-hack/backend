@@ -5,30 +5,30 @@ import os
 
 
 class Settings(BaseSettings):
-    # Application settings
+    # アプリケーション設定
     PROJECT_NAME: str = "FastAPI Backend with SOLID Principles"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
 
-    # Session settings
+    # セッション設定
     SESSION_SECRET_KEY: str = (
         "your-super-secret-session-key-change-in-production-minimum-32-characters"
     )
-    SESSION_MAX_AGE: int = 24 * 60 * 60  # 24 hours in seconds
+    SESSION_MAX_AGE: int = 24 * 60 * 60  # 24時間（秒単位）
 
-    # GCP Cloud SQL Database Settings
+    # GCP Cloud SQLデータベース設定
     DB_USER: str = "postgres"
     DB_PASSWORD: str = "password"
     DB_NAME: str = "fastapi_db"
-    DB_HOST: str = "localhost"  # For local development with Cloud SQL Proxy
+    DB_HOST: str = "localhost"  # Cloud SQL Proxyを使用したローカル開発用
     DB_PORT: str = "5432"
-    CLOUD_SQL_CONNECTION_NAME: Optional[str] = None  # Format: project:region:instance
+    CLOUD_SQL_CONNECTION_NAME: Optional[str] = None  # 形式: project:region:instance
 
-    # Google Cloud Settings
+    # Google Cloud設定
     GOOGLE_CLOUD_PROJECT: Optional[str] = None
 
-    # CORS Settings
+    # CORS設定
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:8000",
@@ -41,10 +41,11 @@ class Settings(BaseSettings):
             return [i.strip() for i in v.split(",")]
         return v
 
-    # Redis Settings (optional - uncomment when needed)
-    # REDIS_URL: str = "redis://localhost:6379"
+    # Redis設定（オプション - 必要時にコメントを解除）
+    REDIS_URL: str = "redis://localhost:6379"
+    USE_REDIS_CACHE: bool = False
 
-    # Email Settings
+    # メール設定
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: Optional[int] = None
     SMTP_TLS: bool = True
@@ -53,23 +54,32 @@ class Settings(BaseSettings):
     EMAILS_FROM_EMAIL: Optional[EmailStr] = None
     EMAILS_FROM_NAME: Optional[str] = None
 
-    # Testing
+    # テスト
     TESTING: bool = False
+
+    # 성능 최적화 설정
+    ENABLE_CACHE: bool = True
+    CACHE_TTL: int = 3600  # 1시간
+    MAX_CACHE_SIZE: int = 1000
+    ASYNC_CONCURRENCY_LIMIT: int = 10
+    BATCH_SIZE: int = 50
+    API_TIMEOUT: int = 30
+    ENABLE_PERFORMANCE_LOGGING: bool = True
 
     @property
     def database_url(self) -> str:
-        """Generate database URL based on environment"""
+        """環境に基づいてデータベースURLを生成"""
         if self.ENVIRONMENT == "production" and self.CLOUD_SQL_CONNECTION_NAME:
-            # Unix socket connection for App Engine/Cloud Run
+            # App Engine/Cloud Run用のUnixソケット接続
             return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@/{self.DB_NAME}?host=/cloudsql/{self.CLOUD_SQL_CONNECTION_NAME}"
         else:
-            # TCP connection for local development with Cloud SQL Proxy
+            # Cloud SQL Proxyを使用したローカル開発用のTCP接続
             return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     class Config:
         env_file = ".env"
         case_sensitive = True
-        extra = "allow"  # 추가 환경변수 허용
+        extra = "allow"  # 追加環境変数を許可
 
 
 settings = Settings()

@@ -54,7 +54,8 @@ cp .env.example .env
 vim .env
 ```
 
-### 3. Dockerで起動
+### 3. Docker で起動
+
 ```bash
 # 全サービス起動
 docker-compose up --build
@@ -67,9 +68,9 @@ docker-compose --profile gcp up
 ```
 
 > **⚠️ 注意**
-> 
-> migrationできていなくてエラーが出る際は以下のコマンドを実行してください：
-> 
+>
+> migration できていなくてエラーが出る際は以下のコマンドを実行してください：
+>
 > ```bash
 > # DBマイグレーションの実行
 > docker-compose exec fastapi alembic upgrade head
