@@ -10,6 +10,7 @@ from app.schemas.spot import (
     DayOfWeek,
     BusinessHours,
     RecommendSpotFromPreInfoRequest,
+    RefineTriPlanRequest,
 )
 
 router = APIRouter()
@@ -96,4 +97,20 @@ async def create_trip_seed_from_pre_info(
     pre_infoからトリップのシードとなるスポット推薦を生成するエンドポイント
     """
     # TODO: pre_infoからスポット情報を生成するロジックを実装
+    return _generate_sample_spots()
+
+
+@router.post(
+    "/{plan_id}/refine", response_model=RecommendSpots, status_code=status.HTTP_200_OK
+)
+async def refine_trip_plan(
+    plan_id: str,
+    input_data: RefineTriPlanRequest,
+) -> RecommendSpots:
+    """
+    既存のトリッププランを精査・改善するエンドポイント
+    """
+    # TODO: plan_idを使って既存のプランを取得し、精査するロジックを実装
+    # input_data.recommend_spots: 現在の推薦スポット情報
+    # input_data.feedback: ユーザーからのフィードバック（オプション）
     return _generate_sample_spots()
