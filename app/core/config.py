@@ -42,7 +42,8 @@ class Settings(BaseSettings):
         return v
 
     # Redis設定（オプション - 必要時にコメントを解除）
-    # REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://localhost:6379"
+    USE_REDIS_CACHE: bool = False
 
     # メール設定
     SMTP_HOST: Optional[str] = None
@@ -55,6 +56,15 @@ class Settings(BaseSettings):
 
     # テスト
     TESTING: bool = False
+
+    # 성능 최적화 설정
+    ENABLE_CACHE: bool = True
+    CACHE_TTL: int = 3600  # 1시간
+    MAX_CACHE_SIZE: int = 1000
+    ASYNC_CONCURRENCY_LIMIT: int = 10
+    BATCH_SIZE: int = 50
+    API_TIMEOUT: int = 30
+    ENABLE_PERFORMANCE_LOGGING: bool = True
 
     @property
     def database_url(self) -> str:

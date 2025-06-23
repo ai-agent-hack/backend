@@ -88,6 +88,141 @@ class PlacesService:
             # フォールバック
             return [f"error_place_{hash(query)}_{i}" for i in range(3)]
 
+    async def text_search_optimized(
+        self,
+        query: str,
+        region: str,
+        max_results: int = 60,
+        language: str = "ja",
+        type: Optional[str] = None,
+    ) -> List[str]:
+        """
+        🚀 최적화된 텍스트 검색: 1페이지 + 페이지네이션 병렬 처리
+
+        Args:
+            query: 검색 쿼리
+            region: 검색 지역
+            max_results: 최대 결과 수 (60개)
+            language: 언어
+            type: 장소 타입
+
+        Returns:
+            place_id 리스트 (최대 60개)
+        """
+        if not self.gmaps:
+            print("⚠️ Google Maps API이용不可。フォールバック使用")
+            return [f"fallback_place_{hash(query)}_{i}" for i in range(20)]
+
+        try:
+            print(f"🚀 최적화된 Places Text Search: '{query}' in {region}")
+
+            # 검색 쿼리 생성
+            search_query = f"{query} {region}"
+            country_code = await self._detect_country_from_region(region)
+
+            # 첫 번째 페이지 검색
+            first_results = self.gmaps.places(
+                query=search_query,
+                language=language,
+                region=country_code,
+                type=type,
+            )
+
+            all_place_ids = []
+
+            # 첫 번째 페이지 결과 처리
+            if first_results.get("results"):
+                for place in first_results["results"]:
+                    if place.get("place_id"):
+                        all_place_ids.append(place["place_id"])
+
+            print(f"📄 첫 번째 페이지: {len(all_place_ids)}개")
+
+            # next_page_token이 있으면 추가 페이지들을 병렬 처리
+            next_page_token = first_results.get("next_page_token")
+            if next_page_token and len(all_place_ids) < max_results:
+                # 2-3페이지를 병렬로 가져오기
+                additional_pages = await self._get_additional_pages_parallel(
+                    next_page_token,
+                    search_query,
+                    language,
+                    country_code,
+                    type,
+                    max_results - len(all_place_ids),
+                )
+                all_place_ids.extend(additional_pages)
+
+            print(f"✅ 총 {len(all_place_ids)}개의 place_id 취득: {query}")
+            return all_place_ids[:max_results]
+
+        except Exception as e:
+            print(f"❌ 최적화된 Places Text Search 실패 '{query}': {str(e)}")
+            return [f"error_place_{hash(query)}_{i}" for i in range(10)]
+
+    async def _get_additional_pages_parallel(
+        self,
+        initial_token: str,
+        search_query: str,
+        language: str,
+        country_code: str,
+        type: Optional[str],
+        remaining_needed: int,
+    ) -> List[str]:
+        """
+        🔥 추가 페이지들을 병렬로 가져오기
+        """
+        additional_place_ids = []
+
+        try:
+            # 토큰이 활성화될 때까지 잠시 대기 (Google API 요구사항)
+            await asyncio.sleep(2)
+
+            # 2페이지 가져오기
+            second_results = self.gmaps.places(
+                query=search_query,
+                language=language,
+                region=country_code,
+                type=type,
+                page_token=initial_token,
+            )
+
+            if second_results.get("results"):
+                for place in second_results["results"]:
+                    if place.get("place_id"):
+                        additional_place_ids.append(place["place_id"])
+
+            print(f"📄 두 번째 페이지: {len(additional_place_ids)}개")
+
+            # 3페이지가 필요하고 토큰이 있으면 계속
+            if len(additional_place_ids) < remaining_needed and second_results.get(
+                "next_page_token"
+            ):
+
+                await asyncio.sleep(2)
+
+                third_results = self.gmaps.places(
+                    query=search_query,
+                    language=language,
+                    region=country_code,
+                    type=type,
+                    page_token=second_results["next_page_token"],
+                )
+
+                if third_results.get("results"):
+                    for place in third_results["results"]:
+                        if (
+                            place.get("place_id")
+                            and len(additional_place_ids) < remaining_needed
+                        ):
+                            additional_place_ids.append(place["place_id"])
+
+                print(f"📄 세 번째 페이지: {len(additional_place_ids)}개 (총합)")
+
+        except Exception as e:
+            print(f"❌ 추가 페이지 처리 실패: {str(e)}")
+
+        return additional_place_ids
+
     async def get_place_details_batch(
         self, place_ids: List[str]
     ) -> List[Dict[str, Any]]:
@@ -364,7 +499,8 @@ class PlacesService:
         ):
             return "KR"
         elif any(
-            keyword in region_lower for keyword in ["フランス", "france", "パリ", "paris"]
+            keyword in region_lower
+            for keyword in ["フランス", "france", "パリ", "paris"]
         ):
             return "FR"
         elif any(
@@ -375,3 +511,138 @@ class PlacesService:
         else:
             print(f"🤔 不明な地域: {region}。デフォルト値(KR)を使用")
             return "KR"  # デフォルト値
+
+    async def get_place_details_ultra_batch(
+        self, place_ids: List[str], batch_size: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        🚀 울트라 배치 처리: 대량 place_id를 효율적으로 병렬 처리
+
+        Args:
+            place_ids: place_id 리스트
+            batch_size: 배치 크기 (기본 20개)
+
+        Returns:
+            장소 상세정보 리스트
+        """
+        if not self.gmaps:
+            print("⚠️ Google Maps API 이용불가. 폴백 사용")
+            return self._create_fallback_places(place_ids)
+
+        try:
+            print(
+                f"🚀 울트라 배치 Details: {len(place_ids)}개 → {batch_size}개씩 병렬 처리"
+            )
+
+            # 배치로 나누기
+            batches = [
+                place_ids[i : i + batch_size]
+                for i in range(0, len(place_ids), batch_size)
+            ]
+
+            print(f"📦 총 {len(batches)}개 배치로 분할")
+
+            # 모든 배치를 병렬로 처리
+            batch_tasks = [
+                self._process_details_batch(batch, batch_idx)
+                for batch_idx, batch in enumerate(batches)
+            ]
+
+            # 병렬 실행
+            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+
+            # 결과 통합
+            all_details = []
+            successful_batches = 0
+
+            for result in batch_results:
+                if not isinstance(result, Exception) and result:
+                    all_details.extend(result)
+                    successful_batches += 1
+                else:
+                    print(f"⚠️ 배치 처리 실패: {result}")
+
+            print(
+                f"✅ 울트라 배치 완료: {successful_batches}/{len(batches)} 배치 성공, {len(all_details)}개 Details"
+            )
+            return all_details
+
+        except Exception as e:
+            print(f"❌ 울트라 배치 처리 실패: {str(e)}")
+            return self._create_fallback_places(place_ids)
+
+    async def _process_details_batch(
+        self, place_ids_batch: List[str], batch_idx: int
+    ) -> List[Dict[str, Any]]:
+        """
+        🔥 개별 배치 처리 (병렬 내부 로직)
+        """
+        batch_details = []
+
+        try:
+            print(f"📦 배치 {batch_idx} 처리 시작: {len(place_ids_batch)}개")
+
+            # 개별 Details API 호출들을 비동기로 처리
+            detail_tasks = [
+                self._get_single_place_detail(place_id) for place_id in place_ids_batch
+            ]
+
+            # 배치 내 병렬 처리 (0.05초 간격으로 시작)
+            detail_results = []
+            for i, task in enumerate(detail_tasks):
+                if i > 0:
+                    await asyncio.sleep(0.05)  # Rate limit 대응
+                detail_results.append(asyncio.create_task(task))
+
+            # 모든 세부 작업 완료 대기
+            completed_details = await asyncio.gather(
+                *detail_results, return_exceptions=True
+            )
+
+            # 성공한 결과만 수집
+            for detail in completed_details:
+                if not isinstance(detail, Exception) and detail:
+                    batch_details.append(detail)
+
+            print(
+                f"✅ 배치 {batch_idx} 완료: {len(batch_details)}/{len(place_ids_batch)}개 성공"
+            )
+
+        except Exception as e:
+            print(f"❌ 배치 {batch_idx} 실패: {str(e)}")
+
+        return batch_details
+
+    async def _get_single_place_detail(self, place_id: str) -> Optional[Dict[str, Any]]:
+        """
+        ⚡ 단일 Place Detail 조회 (비동기 최적화)
+        """
+        try:
+            # Places Details API 호출
+            result = self.gmaps.place(
+                place_id=place_id,
+                fields=[
+                    "place_id",
+                    "name",
+                    "formatted_address",
+                    "geometry",
+                    "rating",
+                    "user_ratings_total",
+                    "price_level",
+                    "type",
+                    "photo",
+                    "opening_hours",
+                    "website",
+                    "formatted_phone_number",
+                    "reviews",
+                ],
+                language="ja",
+            )
+
+            if result.get("result"):
+                return self._format_place_details(result["result"])
+
+        except Exception as e:
+            print(f"❌ Single Details 실패 {place_id}: {str(e)}")
+
+        return None
