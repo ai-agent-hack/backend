@@ -7,6 +7,8 @@ from app.schemas.spot import RecommendSpots
 from app.services.llm_service import LLMService
 from app.services.google_trends_service import GoogleTrendsService
 from app.services.places_service import PlacesService
+from app.services.vector_search_service import VectorSearchService
+from app.services.scoring_service import ScoringService
 
 
 class RecommendationService:
@@ -34,9 +36,15 @@ class RecommendationService:
             self.places_service = PlacesService()
             print("✅ PlacesService初期化完了")
 
-            # TODO: 他のサービス依存性注入
-            # self.vector_search_service = vector_search_service
-            # self.scoring_service = scoring_service
+            # Vector Searchサービス初期化
+            print("🎯 VectorSearchService初期化中...")
+            self.vector_search_service = VectorSearchService()
+            print("✅ VectorSearchService初期化完了")
+
+            # Scoringサービス初期化
+            print("🏆 ScoringService初期化中...")
+            self.scoring_service = ScoringService()
+            print("✅ ScoringService初期化完了")
 
             print("✅ RecommendationService初期化完了")
 
@@ -46,6 +54,8 @@ class RecommendationService:
             self.llm_service = None
             self.google_trends_service = None
             self.places_service = None
+            self.vector_search_service = None
+            self.scoring_service = None
 
     async def recommend_spots_from_pre_info(self, pre_info: PreInfo) -> Dict[str, Any]:
         """
@@ -248,13 +258,26 @@ class RecommendationService:
         self, pre_info: PreInfo, places: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """Step 3-5: Vector Searchで意味類似度計算 (80個候補)"""
-        # TODO: Vector Searchサービス呼び出し
-        # return await self.vector_search_service.find_similar_places(pre_info, places, limit=80)
+        if self.vector_search_service is None:
+            print("⚠️ VectorSearchServiceなし。フォールバック使用")
+            # 仮：上位80個選択 (または全体が80個未満なら全体)
+            result = places[:80] if len(places) >= 80 else places
+            print(f"🎯 Vector Search類似度計算: {len(result)}個候補")
+            return result
 
-        # 仮：上位80個選択 (または全体が80個未満なら全体)
-        result = places[:80] if len(places) >= 80 else places
-        print(f"🎯 Vector Search類似度計算: {len(result)}個候補")
-        return result
+        # 実際のVector Searchサービス呼び出し
+        try:
+            result = await self.vector_search_service.find_similar_places(
+                pre_info, places, limit=80
+            )
+            print(f"✅ Vector Search完了: {len(result)}個選別")
+            return result
+        except Exception as e:
+            print(f"❌ Vector Search失敗: {str(e)}")
+            # フォールバック
+            result = places[:80] if len(places) >= 80 else places
+            print(f"🔄 フォールバック - 上位80個選択: {len(result)}個")
+            return result
 
     async def _llm_rerank_and_adjust_weights(
         self,
@@ -278,12 +301,23 @@ class RecommendationService:
         self, spots: List[Dict[str, Any]], weights: Dict[str, float], pre_info: PreInfo
     ) -> List[Dict[str, Any]]:
         """Step 3-7: 最終スコアリングでTOP-N選別とAPI스키마 변환"""
-        # TODO: Scoringサービス呼び出し
-        # return await self.scoring_service.score_and_rank(spots, weights, pre_info, top_n=10)
-
-        # 仮：上位10個選択
-        top_spots = spots[:10] if len(spots) >= 10 else spots
-        print(f"🏆 最終スコアリング: {len(top_spots)}個選別")
+        if self.scoring_service is None:
+            print("⚠️ ScoringServiceなし。フォールバック使用")
+            # 仮：上位30個選択
+            top_spots = spots[:30] if len(spots) >= 30 else spots
+            print(f"🏆 最終スコアリング: {len(top_spots)}個選別")
+        else:
+            # 実際のスコアリングサービス呼び出し
+            try:
+                top_spots = await self.scoring_service.score_and_rank(
+                    spots, weights, pre_info, top_n=30
+                )
+                print(f"✅ 最終スコアリング完了: {len(top_spots)}個選別")
+            except Exception as e:
+                print(f"❌ 最終スコアリング失敗: {str(e)}")
+                # フォールバック
+                top_spots = spots[:30] if len(spots) >= 30 else spots
+                print(f"🔄 フォールバック - 上位30個選択: {len(top_spots)}個")
 
         # API 스키마에 맞게 TimeSlotSpots 형식으로 변환
         formatted_spots = []
