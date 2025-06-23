@@ -11,6 +11,9 @@ class PreInfoBase(BaseModel):
     end_date: datetime = Field(..., description="旅行終了日")
     atmosphere: str = Field(..., description="旅行の雰囲気（自由記述）")
     budget: int = Field(..., ge=10000, description="予算（ウォン、最低10,000ウォン）")
+    participants_count: int = Field(
+        default=2, ge=1, le=20, description="旅行参加者数（1-20名）"
+    )
     region: str = Field(..., description="旅行地域")
 
 
@@ -29,6 +32,9 @@ class PreInfoUpdate(BaseModel):
     atmosphere: Optional[str] = Field(None, description="旅行の雰囲気")
     budget: Optional[int] = Field(
         None, ge=10000, description="予算（ウォン、最低10,000ウォン）"
+    )
+    participants_count: Optional[int] = Field(
+        None, ge=1, le=20, description="旅行参加者数（1-20名）"
     )
     region: Optional[str] = Field(None, description="旅行地域")
 
