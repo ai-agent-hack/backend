@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 def _generate_sample_spots() -> RecommendSpots:
-    """サンプルのスポット情報を生成する共通関数 (임시)"""
+    """サンプルのスポット情報を生成する共通関数 (一時的)"""
     business_hours = {
         day: BusinessHours(
             open_time=time(9, 0),  # 9:00
@@ -102,7 +102,7 @@ async def create_trip_seed_from_pre_info(
     ※開発中のため認証不要
     """
     try:
-        # Step 1: DB에서 pre_info 데이터 가져오기
+        # Step 1: DBからpre_infoデータを取得
         pre_info_id = int(input_data.pre_info_id)
         pre_info = pre_info_service.pre_info_repository.get(pre_info_id)
 
@@ -112,12 +112,12 @@ async def create_trip_seed_from_pre_info(
                 detail=f"pre_info with id {pre_info_id} not found",
             )
 
-        # Step 2: 추천 서비스 호출
+        # Step 2: 推薦サービスを呼び出し
         recommendation_result = (
             await recommendation_service.recommend_spots_from_pre_info(pre_info)
         )
 
-        print(f"🎯 최종 응답 메타데이터:")
+        print(f"🎯 最終レスポンスメタデータ:")
         print(f"  - Keywords: {recommendation_result.get('keywords_generated')}")
         print(f"  - Weights: {recommendation_result.get('initial_weights')}")
         print(
@@ -128,15 +128,15 @@ async def create_trip_seed_from_pre_info(
             f"  - Final spots: {len(recommendation_result.get('recommend_spots', []))}"
         )
 
-        # 실제 추천 결과를 적절한 형식으로 변환
+        # 実際の推薦結果を適切な形式に変換
         actual_spots = recommendation_result.get("recommend_spots", [])
 
-        # 임시로 샘플 형식으로 변환 (실제 데이터 구조 확인용)
-        print(f"📍 실제 생성된 스포트 데이터:")
-        for i, spot in enumerate(actual_spots[:3]):  # 처음 3개만 로그 출력
+        # 一時的にサンプル形式に変換（実際のデータ構造確認用）
+        print(f"📍 実際に生成されたスポットデータ:")
+        for i, spot in enumerate(actual_spots[:3]):  # 最初の3件のみログ出力
             print(f"  Spot {i+1}: {spot}")
 
-        # 실제 추천 결과 반환 (일단 원본 데이터 구조로)
+        # 実際の推薦結果を返す（一旦元のデータ構造で）
         return {
             "recommend_spot_id": recommendation_result.get("rec_spot_id", "unknown"),
             "recommend_spots": actual_spots,

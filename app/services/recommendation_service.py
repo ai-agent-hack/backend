@@ -231,7 +231,7 @@ class RecommendationService:
         try:
             print(f"📍 Places Details一括取得開始: {len(place_ids)}個")
 
-            # Places API로 상세 정보 취득
+            # Places APIで詳細情報取得
             place_details = await self.places_service.get_place_details_batch(place_ids)
 
             print(f"✅ Places Details取得完了: {len(place_details)}個")
@@ -300,7 +300,7 @@ class RecommendationService:
     async def _final_scoring_and_ranking(
         self, spots: List[Dict[str, Any]], weights: Dict[str, float], pre_info: PreInfo
     ) -> List[Dict[str, Any]]:
-        """Step 3-7: 最終スコアリングでTOP-N選別とAPI스키마 변환"""
+        """Step 3-7: 最終スコアリングでTOP-N選別とAPIスキーマ変換"""
         if self.scoring_service is None:
             print("⚠️ ScoringServiceなし。フォールバック使用")
             # 仮：上位30個選択
@@ -319,10 +319,10 @@ class RecommendationService:
                 top_spots = spots[:30] if len(spots) >= 30 else spots
                 print(f"🔄 フォールバック - 上位30個選択: {len(top_spots)}個")
 
-        # API 스키마에 맞게 TimeSlotSpots 형식으로 변환
+        # APIスキーマに合わせてTimeSlotSpots形式に変換
         formatted_spots = []
 
-        # 스포트들을 3개 시간대로 분배 (단순 분배)
+        # スポットを3つの時間帯に分配（単純分配）
         spots_per_slot = len(top_spots) // 3 + (1 if len(top_spots) % 3 > 0 else 0)
 
         time_slots = ["午前", "午後", "夜"]
@@ -331,7 +331,7 @@ class RecommendationService:
             end_idx = min((i + 1) * spots_per_slot, len(top_spots))
             slot_spots = top_spots[start_idx:end_idx]
 
-            if slot_spots:  # 해당 시간대에 스포트가 있는 경우만 추가
+            if slot_spots:  # 該当時間帯にスポットがある場合のみ追加
                 formatted_spots.append(
                     {
                         "time_slot": time_slot,
@@ -342,14 +342,14 @@ class RecommendationService:
                     }
                 )
 
-        print(f"📋 시간대별 분배 완료: {len(formatted_spots)}개 시간대")
+        print(f"📋 時間帯別分配完了: {len(formatted_spots)}個の時間帯")
         return formatted_spots
 
     def _convert_to_spot_schema(
         self, place_data: Dict[str, Any], index: int
     ) -> Dict[str, Any]:
-        """Places API 데이터를 Spot 스키마로 변환"""
-        # 기본 영업시간 생성 (실제로는 opening_hours 파싱 필요)
+        """Places APIデータをSpotスキーマに変換"""
+        # 基本営業時間生成（実際にはopening_hoursのパース必要）
         business_hours = {
             "MONDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
             "TUESDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
@@ -361,20 +361,20 @@ class RecommendationService:
             "HOLIDAY": {"open_time": "09:00:00", "close_time": "18:00:00"},
         }
 
-        # 기본 혼잡도 데이터 (0-23시간)
-        congestion = [30 + (i * 5) % 70 for i in range(24)]  # 시간별 혼잡도 모의
+        # 基本混雑度データ（0-23時間）
+        congestion = [30 + (i * 5) % 70 for i in range(24)]  # 時間別混雑度シミュレーション
 
         return {
             "spot_id": place_data.get("place_id", f"spot_{index}"),
             "longitude": place_data.get("lng", 0.0),
             "latitude": place_data.get("lat", 0.0),
-            "recommendation_reason": f"{place_data.get('name', '장소')}는 평점 {place_data.get('rating', 0.0)}으로 추천합니다.",
+            "recommendation_reason": f"{place_data.get('name', '場所')}は評点{place_data.get('rating', 0.0)}でおすすめします。",
             "details": {
-                "name": place_data.get("name", f"장소_{index}"),
+                "name": place_data.get("name", f"場所_{index}"),
                 "congestion": congestion,
                 "business_hours": business_hours,
                 "price": place_data.get("price_level", 2)
-                * 1000,  # price_level을 원화로 변환
+                * 1000,  # price_levelを円に変換
             },
             "selected": False,
         }

@@ -34,7 +34,7 @@ async def register_pre_info(
         )
 
 
-# 🧪 테스트용 엔드포인트 (Firebase 토큰 불필요)
+# 🧪 テスト用エンドポイント（Firebaseトークン不要）
 @router.post(
     "/test/register",
     response_model=PreInfoResponse,

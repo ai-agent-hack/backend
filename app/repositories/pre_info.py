@@ -19,7 +19,7 @@ class PreInfoRepository(BaseRepository[PreInfo, PreInfoRequest, PreInfoUpdate]):
     def get_by_user_id(
         self, user_id: int, skip: int = 0, limit: int = 100
     ) -> List[PreInfo]:
-        """특정 사용자의 여행 사전정보 목록 조회"""
+        """特定ユーザーの旅行事前情報リストを照会"""
         return (
             self.db.query(PreInfo)
             .filter(PreInfo.user_id == user_id)
@@ -30,7 +30,7 @@ class PreInfoRepository(BaseRepository[PreInfo, PreInfoRequest, PreInfoUpdate]):
         )
 
     def create_with_user(self, obj_in: PreInfoRequest, user_id: int) -> PreInfo:
-        """사용자 ID와 함께 여행 사전정보 생성"""
+        """ユーザーIDと共に旅行事前情報を作成"""
         obj_data = obj_in.model_dump()
         obj_data["user_id"] = user_id
         db_obj = self.model(**obj_data)
@@ -40,7 +40,7 @@ class PreInfoRepository(BaseRepository[PreInfo, PreInfoRequest, PreInfoUpdate]):
         return db_obj
 
     def get_user_pre_info(self, pre_info_id: int, user_id: int) -> Optional[PreInfo]:
-        """특정 사용자의 특정 여행 사전정보 조회"""
+        """特定ユーザーの特定旅行事前情報を照会"""
         return (
             self.db.query(PreInfo)
             .filter(and_(PreInfo.id == pre_info_id, PreInfo.user_id == user_id))

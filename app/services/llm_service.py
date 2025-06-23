@@ -189,9 +189,9 @@ class LLMService:
 
         # 地域ベースのデフォルトキーワード
         region_keywords = {
-            "서울": ["ソウル カフェ", "江南 グルメ", "漢江 公園"],
-            "부산": ["釜山 海岸", "広安里", "甘川文化村"],
-            "제주": ["済州 自然", "漢拏山", "済州 カフェ"],
+            "ソウル": ["ソウル カフェ", "江南 グルメ", "漢江 公園"],
+            "釜山": ["釜山 海岸", "広安里", "甘川文化村"],
+            "済州": ["済州 自然", "漢拏山", "済州 カフェ"],
             "東京": ["東京 カフェ", "渋谷 グルメ", "浅草 観光"],
             "大阪": ["大阪 グルメ", "道頓堀", "大阪城"],
             "京都": ["京都 寺院", "嵐山", "清水寺"],
@@ -242,16 +242,16 @@ class LLMService:
         target_count: int = 40,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
         """
-        Step 3-6: LLM재랭킹 + 가중치 조정 (80개 → 40개)
+        ステップ 3-6: LLM再ランキング + 重み調整（80個 → 40個）
 
         Args:
-            candidates: 80개 후보 장소 리스트
-            weights: 현재 가중치
-            pre_info: 사용자 여행정보
-            target_count: 선별할 장소 수 (기본 40개)
+            candidates: 80個の候補場所リスト
+            weights: 現在の重み
+            pre_info: ユーザー旅行情報
+            target_count: 選別する場所数（デフォルト40個）
 
         Returns:
-            tuple: (재랭킹된 40개 장소, 조정된 가중치)
+            tuple: (再ランキングされた40個の場所, 調整された重み)
         """
         if not self.model:
             print("⚠️ Vertex AI モデルがありません。フォールバック使用")
@@ -260,13 +260,13 @@ class LLMService:
         try:
             print(f"🤖 LLM再ランキング開始: {len(candidates)}個 → {target_count}個")
 
-            # 프롬프트 생성
+            # プロンプト生成
             prompt = self._create_rerank_prompt(
                 candidates, weights, pre_info, target_count
             )
 
             generation_config = GenerationConfig(
-                temperature=0.3,  # 일관성 중시
+                temperature=0.3,  # 一貫性重視
                 top_p=0.8,
                 max_output_tokens=2048,
                 response_mime_type="application/json",
@@ -277,23 +277,23 @@ class LLMService:
                 generation_config=generation_config,
             )
 
-            # JSON 응답 파싱
+            # JSON応答パース
             result = json.loads(response.text)
 
-            # 선별된 장소 ID 리스트
+            # 選別された場所IDリスト
             selected_place_ids = result.get("selected_place_ids", [])
             adjusted_weights = result.get("adjusted_weights", weights)
-            reasoning = result.get("reasoning", "재랭킹 완료")
+            reasoning = result.get("reasoning", "再ランキング完了")
 
-            # 가중치를 float로 변환
+            # 重みをfloatに変換
             converted_weights = {}
             for key, value in adjusted_weights.items():
                 try:
                     converted_weights[key] = float(value)
                 except (ValueError, TypeError):
-                    converted_weights[key] = weights.get(key, 0.25)  # 기본값 사용
+                    converted_weights[key] = weights.get(key, 0.25)  # デフォルト値使用
 
-            # 선별된 장소들을 순서대로 정렬
+            # 選別された場所を順番に並べ替え
             reranked_places = []
             candidate_map = {
                 place.get("place_id", place.get("name", "")): place
@@ -310,7 +310,7 @@ class LLMService:
                 if len(reranked_places) >= target_count:
                     break
 
-            # 부족한 경우 남은 후보에서 보완
+            # 不足している場合は残りの候補から補完
             if len(reranked_places) < target_count:
                 remaining_count = target_count - len(reranked_places)
                 used_ids = {
@@ -345,60 +345,60 @@ class LLMService:
         pre_info: PreInfo,
         target_count: int,
     ) -> str:
-        """재랭킹용 프롬프트 생성"""
+        """再ランキング用プロンプト生成"""
 
-        # 후보 장소들을 요약 형태로 변환
+        # 候補場所を要約形式に変換
         candidate_summaries = []
-        for i, place in enumerate(candidates[:80]):  # 최대 80개만
+        for i, place in enumerate(candidates[:80]):  # 最大80個まで
             summary = {
                 "id": place.get("place_id", f"place_{i}"),
-                "name": place.get("name", f"장소_{i}"),
+                "name": place.get("name", f"場所_{i}"),
                 "rating": place.get("rating", 0.0),
                 "price_level": place.get("price_level", 2),
-                "address": place.get("address", "주소정보없음")[:50],  # 주소 길이 제한
-                "types": place.get("types", [])[:3],  # 타입 개수 제한
+                "address": place.get("address", "住所情報なし")[:50],  # 住所の長さ制限
+                "types": place.get("types", [])[:3],  # タイプ数制限
                 "similarity_score": place.get("similarity_score", 0.5),
             }
             candidate_summaries.append(summary)
 
         prompt = f"""
-다음은 여행 추천 시스템의 장소 재랭킹 작업입니다. 80개 후보 중에서 사용자에게 가장 적합한 {target_count}개를 선별해주세요.
+次は旅行推薦システムの場所再ランキング作業です。80個の候補からユーザーに最適な{target_count}個を選別してください。
 
-**사용자 여행정보:**
-- 지역: {pre_info.region}
-- 예산: {pre_info.budget_per_person:,}원
-- 인원: {pre_info.participants_count}명
-- 분위기 선호: {pre_info.atmosphere}
-- 기간: {pre_info.start_date} ~ {pre_info.end_date}
+**ユーザー旅行情報:**
+- 地域: {pre_info.region}
+- 予算: {pre_info.budget_per_person:,}円
+- 人数: {pre_info.participants_count}名
+- 雰囲気の好み: {pre_info.atmosphere}
+- 期間: {pre_info.start_date} ~ {pre_info.end_date}
 
-**현재 가중치:**
+**現在の重み:**
 {json.dumps(weights, indent=2, ensure_ascii=False)}
 
-**후보 장소들 (80개):**
+**候補場所（80個）:**
 {json.dumps(candidate_summaries, indent=2, ensure_ascii=False)}
 
-**작업 요구사항:**
+**作業要件:**
 
-1. **개인화 필터링**: 사용자의 예산, 분위기, 인원수를 고려하여 부적합한 장소 제외
-   - 예산 초과 장소 필터링 (price_level 4 = 고급, 3 = 중급, 2 = 보통, 1 = 저렴)
-   - 분위기에 맞지 않는 장소 제외
-   - 그룹 규모에 부적합한 장소 제외
+1. **パーソナライズフィルタリング**: ユーザーの予算、雰囲気、人数を考慮して不適合な場所を除外
+   - 予算超過の場所をフィルタリング (price_level 4 = 高級, 3 = 中級, 2 = 普通, 1 = 安い)
+   - 雰囲気に合わない場所を除外
+   - グループサイズに不適合な場所を除外
 
-2. **다양성 보장**: 카테고리별 균형 유지
-   - 음식점, 관광지, 문화시설, 쇼핑 등 다양한 타입 포함
-   - 동일 지역 집중 방지
+2. **多様性の保証**: カテゴリ別バランスの維持
+   - レストラン、観光地、文化施設、ショッピングなど多様なタイプを含む
+   - 同一地域への集中を防止
 
-3. **품질 우선순위**: 
-   - 평점 4.0 이상 우선 선택
-   - 리뷰 수가 많은 신뢰할 만한 장소 우선
-   - Vector 유사도 점수 고려
+3. **品質優先順位**: 
+   - 評点4.0以上を優先選択
+   - レビュー数が多い信頼できる場所を優先
+   - ベクトル類似度スコアを考慮
 
-4. **가중치 조정**: 사용자 프로필에 따라 가중치 미세조정
-   - 예산 제약 강할 시 → price 가중치 증가
-   - 분위기 중시 → similarity, congestion 가중치 증가
-   - 안전성 중시 → rating 가중치 증가
+4. **重み調整**: ユーザープロフィールに基づいて重みを微調整
+   - 予算制約が強い場合 → price重みを増加
+   - 雰囲気重視 → similarity, congestion重みを増加
+   - 安全性重視 → rating重みを増加
 
-**응답 형식 (JSON):**
+**応答形式 (JSON):**
 ```json
 {{
   "selected_place_ids": ["place_id_1", "place_id_2", ..., "place_id_{target_count}"],
@@ -408,7 +408,7 @@ class LLMService:
     "congestion": 0.20,
     "similarity": 0.10
   }},
-  "reasoning": "선별 기준과 가중치 조정 이유를 2-3문장으로 설명",
+  "reasoning": "選別基準と重み調整の理由を2-3文で説明",
   "category_distribution": {{
     "restaurant": 12,
     "tourist_attraction": 8,
@@ -419,7 +419,7 @@ class LLMService:
 }}
 ```
 
-사용자의 '{pre_info.atmosphere}' 분위기와 예산 {pre_info.budget_per_person:,}원을 핵심 기준으로 최적의 {target_count}개를 선별해주세요.
+ユーザーの'{pre_info.atmosphere}'の雰囲気と予算{pre_info.budget_per_person:,}円を核心基準として最適な{target_count}個を選別してください。
 """
         return prompt
 
@@ -429,10 +429,10 @@ class LLMService:
         weights: Dict[str, float],
         target_count: int,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
-        """LLM 재랭킹 실패 시 폴백 로직"""
-        print(f"🔄 폴백 재랭킹: {len(candidates)}개 → {target_count}개")
+        """LLM再ランキング失敗時のフォールバックロジック"""
+        print(f"🔄 フォールバック再ランキング: {len(candidates)}個 → {target_count}個")
 
-        # 평점 기준으로 정렬
+        # 評点基準でソート
         sorted_candidates = sorted(
             candidates,
             key=lambda x: (
@@ -441,12 +441,12 @@ class LLMService:
             reverse=True,
         )
 
-        # 상위 target_count개 선택
+        # 上位target_count個を選択
         selected = sorted_candidates[:target_count]
 
-        # 가중치 소폭 조정 (rating 중심으로)
+        # 重みを小幅調整（rating中心に）
         adjusted_weights = weights.copy()
         adjusted_weights["rating"] = min(0.5, adjusted_weights.get("rating", 0.4) + 0.1)
 
-        print(f"✅ 폴백 재랭킹 완료: {len(selected)}개")
+        print(f"✅ フォールバック再ランキング完了: {len(selected)}個")
         return selected, adjusted_weights

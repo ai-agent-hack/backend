@@ -15,7 +15,7 @@ class PlacesService:
             print("🗺️ PlacesService初期化開始...")
 
             # Google Maps API キー取得
-            api_key = os.getenv("GOOGLE_MAP_API_KEY")  # S 제거
+            api_key = os.getenv("GOOGLE_MAP_API_KEY")  # Sを削除
             if not api_key:
                 print("⚠️ GOOGLE_MAP_API_KEY環境変数が設定されていません")
                 self.gmaps = None
@@ -58,16 +58,16 @@ class PlacesService:
             # 検索クエリ作成 (地域を含む)
             search_query = f"{query} {region}"
 
-            # 🎯 스마트한 접근법: Google Geocoding API로 지역 자동 인식
+            # 🎯 スマートなアプローチ: Google Geocoding APIで地域自動認識
             country_code = await self._detect_country_from_region(region)
 
-            print(f"🌍 자동 감지된 국가 코드: {country_code} (지역: {region})")
+            print(f"🌍 自動検出された国コード: {country_code} (地域: {region})")
 
-            # Places API 검색실행 (지역 정보를 검색어에 포함)
+            # Places API検索実行（地域情報を検索語に含む）
             results = self.gmaps.places(
                 query=search_query,
                 language=language,
-                region=country_code,  # 자동 감지된 국가 코드 사용
+                region=country_code,  # 自動検出された国コード使用
                 type=type,
             )
 
@@ -167,10 +167,10 @@ class PlacesService:
             "rating": place_data.get("rating", 0.0),
             "ratings_total": place_data.get("user_ratings_total", 0),
             "price_level": place_data.get("price_level", 0),
-            "types": place_data.get("type", []),  # type으로 변경
+            "types": place_data.get("type", []),  # typeに変更
             "photos": self._extract_photo_urls(
                 place_data.get("photo", [])
-            ),  # photo로 변경
+            ),  # photoに変更
             "opening_hours": self._format_opening_hours(
                 place_data.get("opening_hours")
             ),
@@ -298,80 +298,80 @@ class PlacesService:
 
     async def _detect_country_from_region(self, region: str) -> str:
         """
-        🎯 스마트한 지역 감지: Google Geocoding API를 사용해서 자동으로 국가 코드 추출
+        🎯 スマートな地域検出: Google Geocoding APIを使用して自動的に国コードを抽出
 
         Args:
-            region: 사용자가 입력한 지역명 (예: "바르셀로나", "도쿄 시나와구", "서울")
+            region: ユーザーが入力した地域名（例: "バルセロナ", "東京品川区", "ソウル"）
 
         Returns:
-            ISO 국가 코드 (예: "ES", "JP", "KR")
+            ISO国コード（例: "ES", "JP", "KR"）
         """
         if not self.gmaps:
-            print("⚠️ Geocoding API 사용 불가. 기본값 사용")
-            return "KR"  # 기본값
+            print("⚠️ Geocoding API使用不可。デフォルト値を使用")
+            return "KR"  # デフォルト値
 
         try:
-            print(f"🔍 Geocoding API로 지역 분석 중: {region}")
+            print(f"🔍 Geocoding APIで地域分析中: {region}")
 
-            # Google Geocoding API로 지역 정보 조회
+            # Google Geocoding APIで地域情報を照会
             geocode_result = self.gmaps.geocode(region, language="en")
 
             if geocode_result and len(geocode_result) > 0:
                 result = geocode_result[0]
 
-                # address_components에서 country 정보 추출
+                # address_componentsからcountry情報を抽出
                 for component in result.get("address_components", []):
                     if "country" in component.get("types", []):
                         country_code = component.get("short_name", "KR")
-                        print(f"✅ 자동 감지 성공: {region} → {country_code}")
+                        print(f"✅ 自動検出成功: {region} → {country_code}")
                         return country_code
 
-            # 감지 실패 시 폴백 로직
-            print(f"⚠️ Geocoding 결과 없음. 폴백 로직 사용: {region}")
+            # 検出失敗時のフォールバックロジック
+            print(f"⚠️ Geocoding結果なし。フォールバックロジック使用: {region}")
             return self._fallback_country_detection(region)
 
         except Exception as e:
-            print(f"❌ Geocoding API 오류: {str(e)}. 폴백 로직 사용")
+            print(f"❌ Geocoding APIエラー: {str(e)}。フォールバックロジック使用")
             return self._fallback_country_detection(region)
 
     def _fallback_country_detection(self, region: str) -> str:
         """
-        간단한 폴백 로직: 최소한의 주요 지역 매핑
+        シンプルなフォールバックロジック: 最小限の主要地域マッピング
         """
         region_lower = region.lower()
 
-        # 주요 국가/지역만 간단 매핑
+        # 主要国・地域のみシンプルマッピング
         if any(
             keyword in region_lower
             for keyword in [
-                "스페인",
+                "スペイン",
                 "spain",
-                "바르셀로나",
+                "バルセロナ",
                 "barcelona",
-                "마드리드",
+                "マドリード",
                 "madrid",
             ]
         ):
             return "ES"
         elif any(
             keyword in region_lower
-            for keyword in ["일본", "japan", "도쿄", "tokyo", "오사카", "osaka"]
+            for keyword in ["日本", "japan", "東京", "tokyo", "大阪", "osaka"]
         ):
             return "JP"
         elif any(
             keyword in region_lower
-            for keyword in ["한국", "korea", "서울", "seoul", "부산", "busan"]
+            for keyword in ["韓国", "korea", "ソウル", "seoul", "釜山", "busan"]
         ):
             return "KR"
         elif any(
-            keyword in region_lower for keyword in ["프랑스", "france", "파리", "paris"]
+            keyword in region_lower for keyword in ["フランス", "france", "パリ", "paris"]
         ):
             return "FR"
         elif any(
             keyword in region_lower
-            for keyword in ["미국", "usa", "america", "뉴욕", "new york"]
+            for keyword in ["アメリカ", "usa", "america", "ニューヨーク", "new york"]
         ):
             return "US"
         else:
-            print(f"🤔 알 수 없는 지역: {region}. 기본값(KR) 사용")
-            return "KR"  # 한국 서비스이므로 기본값
+            print(f"🤔 不明な地域: {region}。デフォルト値(KR)を使用")
+            return "KR"  # デフォルト値

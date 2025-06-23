@@ -172,36 +172,36 @@ class ScoringService:
             # TODO: 実際の混雑度データがある場合はそれを使用
             # 現在は雰囲気基準で仮想混雑度スコア算出
 
-            atmosphere = getattr(pre_info, "atmosphere", "평범한")
+            atmosphere = getattr(pre_info, "atmosphere", "普通")
 
             # 評価数を混雑度指標として活用
             ratings_total = spot.get("ratings_total", 0)
 
             # 人気度レベル算出 (評価数基準)
             if ratings_total >= 1000:
-                popularity = 1.0  # 매우 인기
+                popularity = 1.0  # 非常に人気
             elif ratings_total >= 500:
-                popularity = 0.8  # 인기
+                popularity = 0.8  # 人気
             elif ratings_total >= 100:
-                popularity = 0.6  # 보통
+                popularity = 0.6  # 普通
             elif ratings_total >= 50:
-                popularity = 0.4  # 조용
+                popularity = 0.4  # 静か
             else:
-                popularity = 0.2  # 매우 조용
+                popularity = 0.2  # 非常に静か
 
-            # 雰囲気と混雑도 매칭
+            # 雰囲気と混雑度のマッチング
             atmosphere_preferences = {
-                "조용한": 0.2,  # 조용한 분위기 → 낮은 인기도 선호
-                "평범한": 0.6,  # 평범한 분위기 → 보통 인기도 선호
-                "활기찬": 1.0,  # 활기찬 분위기 → 높은 인기도 선호
-                "로맨틱한": 0.4,  # 로맨틱한 분위기 → 적당한 인기도 선호
+                "静か": 0.2,  # 静かな雰囲気 → 低い人気度を好む
+                "普通": 0.6,  # 普通の雰囲気 → 普通の人気度を好む
+                "活気": 1.0,  # 活気ある雰囲気 → 高い人気度を好む
+                "ロマンチック": 0.4,  # ロマンチックな雰囲気 → 適度な人気度を好む
             }
 
             preferred_popularity = atmosphere_preferences.get(atmosphere, 0.6)
 
-            # 선호도와 실제 인기도의 차이로 스코어 계산
+            # 好みと実際の人気度の差でスコア計算
             difference = abs(popularity - preferred_popularity)
-            score = 1.0 - difference  # 차이가 적을수록 높은 스코어
+            score = 1.0 - difference  # 差が小さいほど高いスコア
 
             return max(0.0, min(1.0, score))
 
@@ -211,16 +211,16 @@ class ScoringService:
 
     def _calculate_similarity_score(self, spot: Dict[str, Any]) -> float:
         """
-        類似度スコア계산 (Vector Searchから受け継ぎ)
+        類似度スコア計算 (Vector Searchから受け継ぎ)
         """
         try:
-            # Vector Searchで계산된 類似度스코어 사용
+            # Vector Searchで計算された類似度スコア使用
             similarity_score = spot.get("similarity_score")
 
             if similarity_score is not None:
                 return max(0.0, min(1.0, float(similarity_score)))
             else:
-                # Vector Search스코어가 없는 경우 기본값
+                # Vector Searchスコアがない場合の基本値
                 return 0.5
 
         except Exception as e:
@@ -231,7 +231,7 @@ class ScoringService:
         self, scores: Dict[str, float], weights: Dict[str, float]
     ) -> float:
         """
-        重み付け最終スコア계산
+        重み付け最終スコア計算
         """
         try:
             final_score = 0.0
@@ -240,7 +240,7 @@ class ScoringService:
             for dimension, score in scores.items():
                 weight = weights.get(dimension, 0.0)
 
-                # 타입 안전성 확보
+                # 型安全性を確保
                 try:
                     score_float = float(score)
                     weight_float = float(weight)
@@ -251,7 +251,7 @@ class ScoringService:
                 final_score += score_float * weight_float
                 total_weight += weight_float
 
-            # 重み정규화 (합계가 1.0이 아닌경우 대비)
+            # 重み正規化 (合計が1.0でない場合に対応)
             if total_weight > 0:
                 final_score = final_score / total_weight
             else:

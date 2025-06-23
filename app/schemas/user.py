@@ -106,7 +106,7 @@ class User(UserBase):
 
 
 class SessionLoginResponse(BaseModel):
-    """세션 로그인 응답 스키마"""
+    """セッションログインレスポンススキーマ"""
 
     message: str
     user: User
@@ -116,6 +116,6 @@ class SessionLoginResponse(BaseModel):
 
 
 class LogoutResponse(BaseModel):
-    """로그아웃 응답 스키마"""
+    """ログアウトレスポンススキーマ"""
 
     message: str

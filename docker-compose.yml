@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-    # FastAPI application
+    # FastAPIアプリケーション
     fastapi:
         build: .
         ports:
@@ -13,17 +13,17 @@ services:
             - DB_NAME=fastapi_db
             - DB_HOST=postgres
             - DB_PORT=5432
-            # - REDIS_URL=redis://redis:6379  # Uncomment when Redis is needed
+            # - REDIS_URL=redis://redis:6379  # Redis使用時にコメントを解除
             - SECRET_KEY=your-secret-key-for-development-change-in-production
-            # Firebase environment variables
+            # Firebase環境変数
             - FIREBASE_SERVICE_ACCOUNT_JSON=${FIREBASE_SERVICE_ACCOUNT_JSON}
             - GOOGLE_PROJECT_ID=ai-agent-hack
             - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
-            # Google Maps API Key
+            # Google Maps APIキー
             - GOOGLE_MAP_API_KEY=${GOOGLE_MAP_API_KEY}
         depends_on:
             - postgres
-            # - redis  # Uncomment when Redis is needed
+            # - redis  # Redis使用時にコメントを解除
         volumes:
             - ./app:/app/app
         env_file:
@@ -32,7 +32,7 @@ services:
         networks:
             - fastapi-network
 
-    # PostgreSQL database
+    # PostgreSQLデータベース
     postgres:
         image: postgres:15-alpine
         environment:
@@ -47,7 +47,7 @@ services:
         networks:
             - fastapi-network
 
-    # Redis for caching (commented out - uncomment when needed)
+    # キャッシュ用Redis（コメントアウト - 必要時にコメントを解除）
     # redis:
     #   image: redis:7-alpine
     #   ports:
@@ -57,7 +57,7 @@ services:
     #   networks:
     #     - fastapi-network
 
-    # Adminer for database management (optional)
+    # データベース管理用Adminer（オプション）
     adminer:
         image: adminer
         ports:
@@ -67,7 +67,7 @@ services:
         networks:
             - fastapi-network
 
-    # GCP Cloud SQL Proxy (commented out - uncomment for GCP deployment)
+    # GCP Cloud SQLプロキシ（コメントアウト - GCPデプロイ時にコメントを解除）
     # cloud-sql-proxy:
     #   image: gcr.io/cloudsql-docker/gce-proxy:1.33.2
     #   command: /cloud_sql_proxy -instances=${CLOUD_SQL_CONNECTION_NAME}=tcp:0.0.0.0:5432
@@ -84,7 +84,7 @@ services:
 
 volumes:
     postgres_data:
-    # redis_data:  # Uncomment when Redis is needed
+    # redis_data:  # Redis使用時にコメントを解除
 
 networks:
     fastapi-network:

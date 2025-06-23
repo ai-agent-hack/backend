@@ -143,7 +143,7 @@ async def get_current_user_session(
     user_service: UserService = Depends(get_user_service),
 ) -> User:
     """
-    세션 기반 사용자 인증 (Firebase 토큰 없이 세션만으로 인증)
+    セッションベースユーザー認証（Firebaseトークンなしでセッションのみで認証）
 
     Args:
         request: FastAPI request object with session
@@ -182,7 +182,7 @@ async def get_current_user_flexible(
     user_service: UserService = Depends(get_user_service),
 ) -> User:
     """
-    유연한 인증 방식 - Firebase 토큰 또는 세션 둘 다 지원
+    柔軟な認証方式 - Firebaseトークンまたはセッション両方をサポート
 
     Args:
         request: FastAPI request object
@@ -195,7 +195,7 @@ async def get_current_user_flexible(
     Raises:
         HTTPException: If both authentication methods fail
     """
-    # 1. Firebase 토큰이 있으면 Firebase 인증 시도
+    # 1. FirebaseトークンがあればFirebase認証を試行
     if firebase_token:
         try:
             user = await user_service.authenticate_firebase_user(firebase_token)
@@ -204,7 +204,7 @@ async def get_current_user_flexible(
         except Exception:
             pass
 
-    # 2. 세션 인증 시도
+    # 2. セッション認証を試行
     user_id = request.session.get("user_id")
     if user_id:
         try:
@@ -214,7 +214,7 @@ async def get_current_user_flexible(
         except Exception:
             pass
 
-    # 3. 둘 다 실패하면 에러
+    # 3. 両方とも失敗した場合はエラー
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Authentication required. Please provide Firebase token or valid session.",
@@ -226,7 +226,7 @@ async def get_current_user_test(
     user_service: UserService = Depends(get_user_service),
 ) -> User:
     """
-    테스트용 의존성 - 하드코딩된 사용자 반환 (개발 환경에서만 사용)
+    テスト用依存性 - ハードコーディングされたユーザーを返す（開発環境でのみ使用）
     """
     if settings.ENVIRONMENT != "development":
         raise HTTPException(
@@ -234,21 +234,21 @@ async def get_current_user_test(
             detail="Test authentication only available in development",
         )
 
-    # 테스트용 하드코딩된 사용자 (첫 번째 사용자)
+    # テスト用ハードコーディングされたユーザー（最初のユーザー）
     try:
-        # Firebase UID로 사용자 찾기 (테스트용)
+        # Firebase UIDでユーザーを検索（テスト用）
         from app.repositories.user import UserRepository
         from app.core.database import get_db
 
         db = next(get_db())
         user_repo = UserRepository(db)
 
-        # 첫 번째 active 사용자 반환
+        # 最初のactiveユーザーを返す
         users = user_repo.get_multi(skip=0, limit=1)
         if users:
             return users[0]
 
-        # 사용자가 없으면 테스트 사용자 생성
+        # ユーザーが存在しない場合はテストユーザーを作成
         from app.schemas.user import UserCreate
 
         test_user = UserCreate(
