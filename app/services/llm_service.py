@@ -366,7 +366,7 @@ class LLMService:
 
 **ユーザー旅行情報:**
 - 地域: {pre_info.region}
-- 予算: {pre_info.budget_per_person:,}円
+- 予算: {pre_info.budget:,}円
 - 人数: {pre_info.participants_count}名
 - 雰囲気の好み: {pre_info.atmosphere}
 - 期間: {pre_info.start_date} ~ {pre_info.end_date}
@@ -419,7 +419,7 @@ class LLMService:
 }}
 ```
 
-ユーザーの'{pre_info.atmosphere}'の雰囲気と予算{pre_info.budget_per_person:,}円を核心基準として最適な{target_count}個を選別してください。
+ユーザーの'{pre_info.atmosphere}'の雰囲気と予算{pre_info.budget:,}円を核心基準として最適な{target_count}個を選別してください。
 """
         return prompt
 

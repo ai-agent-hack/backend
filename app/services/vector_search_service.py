@@ -108,26 +108,27 @@ class VectorSearchService:
             parts.append(f"地域: {pre_info.region}")
 
         # 予算情報
-        if pre_info.budget_per_person:
-            budget_text = f"予算: {pre_info.budget_per_person:,}円"
-            if pre_info.budget_per_person <= 50000:
+        if pre_info.budget:
+            budget_text = f"予算: {pre_info.budget:,}円"
+            if pre_info.budget <= 50000:
                 budget_text += " (節約志向)"
-            elif pre_info.budget_per_person >= 100000:
+            elif pre_info.budget >= 100000:
                 budget_text += " (高級志向)"
             parts.append(budget_text)
 
         # 人数情報
-        if pre_info.participants_count:
-            group_type = ""
-            if pre_info.participants_count == 1:
-                group_type = "一人旅"
-            elif pre_info.participants_count == 2:
-                group_type = "カップル旅行"
-            elif pre_info.participants_count <= 4:
-                group_type = "小グループ旅行"
-            else:
-                group_type = "大グループ旅行"
-            parts.append(f"人数: {pre_info.participants_count}人 ({group_type})")
+        # 인원수 정보
+        participants_count = pre_info.participants_count
+        group_type = ""
+        if participants_count == 1:
+            group_type = "一人旅"
+        elif participants_count == 2:
+            group_type = "カップル旅行"
+        elif participants_count <= 4:
+            group_type = "小グループ旅行"
+        else:
+            group_type = "大グループ旅行"
+        parts.append(f"人数: {participants_count}人 ({group_type})")
 
         # 期間情報
         if pre_info.start_date and pre_info.end_date:

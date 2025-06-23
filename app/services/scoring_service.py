@@ -104,7 +104,7 @@ class ScoringService:
         """
         try:
             price_level = spot.get("price_level", 2)  # デフォルト中級
-            user_budget = pre_info.budget_per_person
+            user_budget = pre_info.budget
 
             # price_levelを想定価格に変換 (1=格安, 2=中級, 3=高級, 4=最高級)
             price_ranges = {
