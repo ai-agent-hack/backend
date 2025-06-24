@@ -49,12 +49,29 @@ class TripRefineService:
             plan_info["plan_context"], chat_summary, refine_request.recommend_spots
         )
 
-        # 3. Generate new recommendations using existing pipeline
-        # Note: This uses the same recommendation service as /trip/seed
-        new_recommendations = (
-            await self.recommendation_service.generate_recommendations(
-                pre_info_context=refined_context, chat_context=chat_summary
-            )
+        # 3. Process selected spots and generate new recommendations
+        selected_spots = self._extract_selected_spots(refine_request.recommend_spots)
+
+        # Generate new recommendations for non-selected spots only
+        pre_info = plan_info.get("pre_info")
+        if not pre_info:
+            raise ValueError(f"PreInfo not found for plan {plan_id}")
+
+        recommendation_result = (
+            await self.recommendation_service.recommend_spots_from_pre_info(pre_info)
+        )
+
+        # Convert recommendation result and merge with selected spots
+        new_spots = recommendation_result.get("recommend_spots", [])
+        recommend_spot_id = recommendation_result.get(
+            "rec_spot_id", f"refined_{plan_id}"
+        )
+
+        # Merge selected spots with new recommendations
+        merged_spots = self._merge_selected_and_new_spots(selected_spots, new_spots)
+
+        new_recommendations = RecommendSpots(
+            recommend_spot_id=recommend_spot_id, recommend_spots=merged_spots
         )
 
         return new_recommendations
@@ -215,3 +232,71 @@ class TripRefineService:
         refined_context["spots_count"] = len(current_spot_ids)
 
         return refined_context
+
+    def _extract_selected_spots(
+        self, recommend_spots: RecommendSpots
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract spots that are marked as selected (selected: true).
+        Returns list of spots grouped by time slot.
+        """
+        selected_spots = []
+
+        for time_slot in recommend_spots.recommend_spots:
+            selected_in_slot = [
+                {"time_slot": time_slot.time_slot, "spot": spot}
+                for spot in time_slot.spots
+                if spot.selected
+            ]
+            selected_spots.extend(selected_in_slot)
+
+        return selected_spots
+
+    def _merge_selected_and_new_spots(
+        self, selected_spots: List[Dict[str, Any]], new_spots: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Merge selected spots with new recommendations.
+        Selected spots take priority and are preserved in their original time slots.
+        New spots fill the remaining slots.
+        """
+        from app.schemas.spot import TimeSlot, Spot, TimeSlotSpots
+
+        # Group selected spots by time slot
+        selected_by_timeslot = {}
+        for selected in selected_spots:
+            time_slot = selected["time_slot"]
+            if time_slot not in selected_by_timeslot:
+                selected_by_timeslot[time_slot] = []
+            selected_by_timeslot[time_slot].append(selected["spot"])
+
+        # Create merged result with all time slots
+        merged_time_slots = []
+
+        # Process each time slot from new recommendations
+        for new_time_slot in new_spots:
+            time_slot_name = new_time_slot["time_slot"]
+
+            # Start with selected spots for this time slot
+            merged_spots = selected_by_timeslot.get(time_slot_name, [])
+
+            # Add new spots to fill remaining slots (assuming max 8 spots per time slot)
+            new_spots_in_slot = new_time_slot["spots"]
+            spots_needed = max(8 - len(merged_spots), 0)
+
+            # Add new spots up to the limit
+            for i, new_spot in enumerate(new_spots_in_slot):
+                if i < spots_needed:
+                    # Convert dict to Spot object if needed
+                    if isinstance(new_spot, dict):
+                        merged_spots.append(Spot(**new_spot))
+                    else:
+                        merged_spots.append(new_spot)
+
+            # Create TimeSlotSpots object correctly
+            merged_time_slot = TimeSlotSpots(
+                time_slot=TimeSlot(time_slot_name), spots=merged_spots
+            )
+            merged_time_slots.append(merged_time_slot)
+
+        return merged_time_slots
