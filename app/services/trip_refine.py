@@ -280,18 +280,16 @@ class TripRefineService:
             # Start with selected spots for this time slot
             merged_spots = selected_by_timeslot.get(time_slot_name, [])
 
-            # Add new spots to fill remaining slots (assuming max 8 spots per time slot)
+            # Add new spots to fill remaining slots (no hard limit, dynamic allocation)
             new_spots_in_slot = new_time_slot["spots"]
-            spots_needed = max(8 - len(merged_spots), 0)
 
-            # Add new spots up to the limit
-            for i, new_spot in enumerate(new_spots_in_slot):
-                if i < spots_needed:
-                    # Convert dict to Spot object if needed
-                    if isinstance(new_spot, dict):
-                        merged_spots.append(Spot(**new_spot))
-                    else:
-                        merged_spots.append(new_spot)
+            # Add all new spots (no artificial limit like the original service)
+            for new_spot in new_spots_in_slot:
+                # Convert dict to Spot object if needed
+                if isinstance(new_spot, dict):
+                    merged_spots.append(Spot(**new_spot))
+                else:
+                    merged_spots.append(new_spot)
 
             # Create TimeSlotSpots object correctly
             merged_time_slot = TimeSlotSpots(
