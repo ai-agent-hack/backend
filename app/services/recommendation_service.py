@@ -525,11 +525,11 @@ class RecommendationService:
         """고속 스팟 스키마 변환"""
         lat = place_data.get("lat", 41.3851)
         lng = place_data.get("lng", 2.1734)
-        
+
         # Google Mapに投稿された写真のURLを取得（最初の1枚）
         photos = place_data.get("photos", [])
         google_map_image_url = photos[0] if photos else None
-        
+
         return {
             "spot_id": place_data.get("place_id", f"spot_{index}"),
             "longitude": lng,
@@ -556,4 +556,7 @@ class RecommendationService:
             "google_map_image_url": google_map_image_url,
             "website_url": place_data.get("website", None),
             "selected": False,
+            "similarity_score": place_data.get(
+                "similarity_score", None
+            ),  # similarity_score 추가
         }
