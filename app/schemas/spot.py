@@ -61,6 +61,7 @@ class Spot(BaseModel):
     google_map_image_url: Optional[str] = None
     website_url: Optional[str] = None
     selected: bool = False
+    similarity_score: Optional[float] = None
 
 
 class TimeSlotSpots(BaseModel):
@@ -103,8 +104,9 @@ class RecommendSpotFromPreInfoRequest(BaseModel):
 
     pre_info_id: str
 
-      
+
 class RefineTriPlanRequest(BaseModel):
     """トリッププラン精査の入力スキーマ"""
-    chat_history: List[ChatMessage]
 
+    chat_history: List[ChatMessage]
+    recommend_spots: RecommendSpots
