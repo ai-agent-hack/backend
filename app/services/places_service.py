@@ -290,23 +290,12 @@ class PlacesService:
         """
         Places API結果をフォーマット
         """
-        print(f"🔍 DEBUG _format_place_details: Processing place: {place_data.get('name', 'Unknown')}")
-        print(f"🔍 DEBUG place_data keys: {list(place_data.keys())}")
-        
-        # photoフィールドの詳細をチェック
-        if "photo" in place_data:
-            print(f"🔍 DEBUG 'photo' field exists: Type={type(place_data['photo'])}, Value={place_data['photo']}")
-        elif "photos" in place_data:
-            print(f"🔍 DEBUG 'photos' field exists: Type={type(place_data['photos'])}, Value={place_data['photos']}")
-        else:
-            print("⚠️ DEBUG: No 'photo' or 'photos' field found in place_data")
         
         geometry = place_data.get("geometry", {})
         location = geometry.get("location", {})
 
         # photoかphotosかを動的に判断
         photo_field = place_data.get("photos") or place_data.get("photo", [])
-        print(f"🔍 DEBUG: Using photo field: Type={type(photo_field)}, Length={len(photo_field) if isinstance(photo_field, list) else 'N/A'}")
 
         return {
             "place_id": place_data.get("place_id"),
@@ -331,20 +320,11 @@ class PlacesService:
         """
         写真URLを抽出 (最大3枚まで)
         """
-        print(f"🔍 DEBUG _extract_photo_urls called with photos type: {type(photos)}")
-        print(f"🔍 DEBUG photos value: {photos}")
-        
-        if not self.gmaps:
-            print("🔍 DEBUG: No gmaps client available")
-            return []
-            
-        if not photos:
-            print("🔍 DEBUG: photos is empty or None")
+        if not self.gmaps or not photos:
             return []
         
         # photosが実際にリストかチェック
         if not isinstance(photos, list):
-            print(f"⚠️ DEBUG: photos is not a list! Type: {type(photos)}, Value: {photos}")
             # 単一のphotoオブジェクトの場合の処理
             if isinstance(photos, dict):
                 photos = [photos]
@@ -352,26 +332,11 @@ class PlacesService:
                 return []
 
         photo_urls = []
-        print(f"🔍 DEBUG: Processing {len(photos)} photos (max 3)")
-        
-        for i, photo in enumerate(photos[:3]):  # 最大3枚
-            print(f"🔍 DEBUG Photo {i}: Type={type(photo)}, Value={photo}")
-            
-            if not isinstance(photo, dict):
-                print(f"⚠️ DEBUG: Photo {i} is not a dict, skipping")
-                continue
-                
-            if photo.get("photo_reference"):
-                photo_ref = photo["photo_reference"]
-                print(f"✅ DEBUG: Found photo_reference: {photo_ref}")
+        for photo in photos[:3]:  # 最大3枚
+            if isinstance(photo, dict) and photo.get("photo_reference"):
                 # Photo APIを使用してURL生成
-                url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference={photo_ref}&key={self.gmaps.key}"
+                url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference={photo['photo_reference']}&key={self.gmaps.key}"
                 photo_urls.append(url)
-                print(f"✅ DEBUG: Generated URL: {url[:100]}...")  # URLの最初の100文字だけ表示
-            else:
-                print(f"⚠️ DEBUG: Photo {i} has no photo_reference. Keys: {list(photo.keys()) if isinstance(photo, dict) else 'N/A'}")
-
-        print(f"🔍 DEBUG: Extracted {len(photo_urls)} photo URLs")
         return photo_urls
 
     def _format_opening_hours(self, opening_hours: Optional[Dict]) -> Optional[Dict]:
@@ -673,8 +638,8 @@ class PlacesService:
                     "rating",
                     "user_ratings_total",
                     "price_level",
-                    "types",
-                    "photos",
+                    "type",
+                    "photo",
                     "opening_hours",
                     "website",
                     "formatted_phone_number",

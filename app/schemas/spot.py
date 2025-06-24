@@ -58,6 +58,7 @@ class Spot(BaseModel):
     latitude: float
     recommendation_reason: str
     details: SpotDetail
+    google_map_image_url: Optional[str] = None
     selected: bool = False
 
 

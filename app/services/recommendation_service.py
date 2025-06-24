@@ -523,11 +523,18 @@ class RecommendationService:
         self, place_data: Dict[str, Any], index: int
     ) -> Dict[str, Any]:
         """고속 스팟 스키마 변환"""
+        lat = place_data.get("lat", 41.3851)
+        lng = place_data.get("lng", 2.1734)
+        
+        # Google Mapに投稿された写真のURLを取得（最初の1枚）
+        photos = place_data.get("photos", [])
+        google_map_image_url = photos[0] if photos else None
+        
         return {
             "spot_id": place_data.get("place_id", f"spot_{index}"),
-            "longitude": place_data.get("lng", 2.1734),
-            "latitude": place_data.get("lat", 41.3851),
-            "recommendation_reason": f"{place_data.get('name', '장소')}는 평점 {place_data.get('rating', 4.0):.1f}로 추천합니다。",
+            "longitude": lng,
+            "latitude": lat,
+            "recommendation_reason": f"{place_data.get('name', '場所')}は評価 {place_data.get('rating', 4.0):.1f}でおすすめです。",
             "details": {
                 "name": place_data.get("name", f"장소_{index}"),
                 "congestion": [40 + (i * 3) % 50 for i in range(24)],  # 간단한 혼잡도
@@ -546,5 +553,6 @@ class RecommendationService:
                 },
                 "price": place_data.get("price_level", 2) * 1000,
             },
+            "google_map_image_url": google_map_image_url,
             "selected": False,
         }
