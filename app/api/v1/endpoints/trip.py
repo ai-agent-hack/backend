@@ -155,6 +155,7 @@ async def create_trip_seed_from_pre_info(
             detail="pre_info_id must be a valid integer",
         )
 
+
 @router.post(
     "/{plan_id}/refine", response_model=RecommendSpots, status_code=status.HTTP_200_OK
 )

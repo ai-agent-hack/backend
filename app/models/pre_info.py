@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text, Index, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from app.models.base import Base
 
@@ -32,8 +32,11 @@ class PreInfo(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # Relationship with User
+    # Relationships
     # user = relationship("User", back_populates="pre_infos")
+    rec_plans: Mapped[List["RecPlan"]] = relationship(
+        "RecPlan", back_populates="pre_info", cascade="all, delete-orphan"
+    )
 
     # Database indexes for performance
     __table_args__ = (

@@ -103,8 +103,9 @@ class RecommendSpotFromPreInfoRequest(BaseModel):
 
     pre_info_id: str
 
-      
+
 class RefineTriPlanRequest(BaseModel):
     """トリッププラン精査の入力スキーマ"""
-    chat_history: List[ChatMessage]
 
+    chat_history: List[ChatMessage]
+    recommend_spots: RecommendSpots
