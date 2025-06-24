@@ -61,6 +61,7 @@ class Spot(BaseModel):
     google_map_image_url: Optional[str] = None
     website_url: Optional[str] = None
     selected: bool = False
+    similarity_score: Optional[float] = None
 
 
 class TimeSlotSpots(BaseModel):

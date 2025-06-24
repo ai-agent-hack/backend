@@ -132,6 +132,7 @@ def get_rec_spot_repository(db: Session = Depends(get_db)) -> RecSpotRepository:
 def get_rec_plan_service(
     rec_plan_repo: RecPlanRepository = Depends(get_rec_plan_repository),
     pre_info_repo: PreInfoRepository = Depends(get_pre_info_repository),
+    rec_spot_repo: RecSpotRepository = Depends(get_rec_spot_repository),
 ) -> RecPlanService:
     """
     Dependency to get rec_plan service instance.
@@ -139,11 +140,12 @@ def get_rec_plan_service(
     Args:
         rec_plan_repo: RecPlan repository dependency
         pre_info_repo: PreInfo repository dependency
+        rec_spot_repo: RecSpot repository dependency
 
     Returns:
         RecPlanService instance
     """
-    return RecPlanService(rec_plan_repo, pre_info_repo)
+    return RecPlanService(rec_plan_repo, pre_info_repo, rec_spot_repo)
 
 
 def get_rec_spot_service(

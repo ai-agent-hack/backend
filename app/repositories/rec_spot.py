@@ -145,3 +145,26 @@ class RecSpotRepository:
             .limit(limit)
             .all()
         )
+
+    def update_similarity_scores_batch(
+        self, plan_id: str, version: int, spot_scores: Dict[str, float]
+    ) -> int:
+        """Update similarity scores for multiple spots in batch"""
+        updated_count = 0
+
+        for spot_id, score in spot_scores.items():
+            result = (
+                self.db.query(RecSpot)
+                .filter(
+                    and_(
+                        RecSpot.plan_id == plan_id,
+                        RecSpot.version == version,
+                        RecSpot.spot_id == spot_id,
+                    )
+                )
+                .update({"similarity_score": Decimal(str(score))})
+            )
+            updated_count += result
+
+        self.db.commit()
+        return updated_count

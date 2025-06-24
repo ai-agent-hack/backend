@@ -5,6 +5,9 @@ from app.models.rec_plan import RecPlan
 from app.models.pre_info import PreInfo
 from app.repositories.rec_plan import RecPlanRepository
 from app.repositories.pre_info import PreInfoRepository
+from app.repositories.rec_spot import RecSpotRepository
+from app.schemas.spot import RecommendSpots
+from app.services.rec_spot import RecSpotService
 
 
 class RecPlanService:
@@ -14,10 +17,14 @@ class RecPlanService:
     """
 
     def __init__(
-        self, rec_plan_repo: RecPlanRepository, pre_info_repo: PreInfoRepository
+        self,
+        rec_plan_repo: RecPlanRepository,
+        pre_info_repo: PreInfoRepository,
+        rec_spot_repo: RecSpotRepository = None,
     ):
         self.rec_plan_repo = rec_plan_repo
         self.pre_info_repo = pre_info_repo
+        self.rec_spot_repo = rec_spot_repo
 
     def get_plan_by_id(self, plan_id: str) -> Optional[RecPlan]:
         """Get the latest version of a plan"""
@@ -132,3 +139,54 @@ class RecPlanService:
                 )
 
         return sorted(user_plans, key=lambda x: x["created_at"], reverse=True)
+
+    def get_plan_with_spots(
+        self, plan_id: str, version: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get plan information with associated spots data.
+        Used by GET /trip/{plan_id} endpoint.
+        """
+        if not self.rec_spot_repo:
+            raise ValueError("RecSpotRepository not available")
+
+        # Get specific version or latest
+        if version:
+            plan = self.rec_plan_repo.get_by_plan_id_and_version(plan_id, version)
+        else:
+            plan = self.rec_plan_repo.get_latest_version(plan_id)
+
+        if not plan:
+            return None
+
+        # Get associated spots
+        rec_spots = self.rec_spot_repo.get_spots_by_plan_version(plan_id, plan.version)
+
+        # Convert to RecommendSpots format using RecSpotService
+        rec_spot_service = RecSpotService(self.rec_spot_repo)
+        recommend_spots = rec_spot_service.convert_rec_spots_to_recommend_spots(
+            rec_spots, f"plan_{plan_id}_v{plan.version}"
+        )
+
+        # Get pre_info for additional context
+        pre_info = self.pre_info_repo.get(plan.pre_info_id)
+
+        return {
+            "plan_info": {
+                "plan_id": plan.plan_id,
+                "version": plan.version,
+                "pre_info_id": plan.pre_info_id,
+                "created_at": plan.created_at,
+                "total_spots": len(rec_spots),
+            },
+            "recommend_spots": recommend_spots,
+            "pre_info": pre_info,
+        }
+
+    def get_plan_versions(self, plan_id: str) -> List[int]:
+        """
+        Get all version numbers for a plan.
+        Used by GET /trip/{plan_id} endpoint.
+        """
+        versions = self.rec_plan_repo.get_version_history(plan_id)
+        return [v.version for v in versions]

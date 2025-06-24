@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from app.models.rec_spot import RecSpot, SpotStatus
 from app.repositories.rec_spot import RecSpotRepository
-from app.schemas.spot import RecommendSpots, TimeSlotSpots, SpotInfo
+from app.schemas.spot import RecommendSpots, TimeSlotSpots, Spot, SpotDetail, TimeSlot
 
 
 class RecSpotService:
@@ -104,16 +104,28 @@ class RecSpotService:
         # Group spots by time slots (simplified - all in one time slot for now)
         spots_info = []
         for rec_spot in active_spots:
+            # Create dummy spot data since we only have spot_id in RecSpot
+            # In real implementation, this would fetch full spot details from Places API
             spots_info.append(
-                SpotInfo(
+                Spot(
                     spot_id=rec_spot.spot_id,
-                    # Note: We only have spot_id in RecSpot, other fields would come from Places API
-                    # This would be enhanced with actual spot data in a real implementation
+                    longitude=0.0,  # Placeholder
+                    latitude=0.0,  # Placeholder
+                    recommendation_reason="Saved spot",
+                    details=SpotDetail(
+                        name=f"Spot {rec_spot.spot_id}",
+                        congestion=[0] * 24,
+                        business_hours={},
+                        price=0,
+                    ),
+                    selected=True,
                 )
             )
 
         time_slot_spots = [
-            TimeSlotSpots(time_slot="전체", spots=spots_info)  # Simplified time slot
+            TimeSlotSpots(
+                time_slot=TimeSlot.MORNING, spots=spots_info
+            )  # Simplified time slot
         ]
 
         return RecommendSpots(
@@ -159,21 +171,14 @@ class RecSpotService:
 
     def update_similarity_scores(
         self, plan_id: str, version: int, spot_scores: Dict[str, float]
-    ) -> List[RecSpot]:
+    ) -> int:
         """
         Update similarity scores for spots in a specific version.
         Used after vector search processing.
         """
-        spots = self.rec_spot_repo.get_spots_by_plan_version(plan_id, version)
-        updated_spots = []
-
-        for spot in spots:
-            if spot.spot_id in spot_scores:
-                # Update the score (would need to implement update method in repository)
-                spot.similarity_score = Decimal(str(spot_scores[spot.spot_id]))
-                updated_spots.append(spot)
-
-        return updated_spots
+        return self.rec_spot_repo.update_similarity_scores_batch(
+            plan_id, version, spot_scores
+        )
 
     def get_spot_history(self, plan_id: str, spot_id: str) -> List[RecSpot]:
         """Get the history of a specific spot across all versions"""
