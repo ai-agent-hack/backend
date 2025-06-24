@@ -37,8 +37,8 @@ class RecSpot(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # Relationships
-    rec_plan = relationship("RecPlan", back_populates="rec_spots")
+    # Relationships는 복합키로 인해 복잡하므로 repository에서 처리
+    # rec_plan = relationship("RecPlan", back_populates="rec_spots")
 
     # Database indexes for performance
     __table_args__ = (

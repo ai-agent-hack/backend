@@ -27,9 +27,7 @@ class RecPlan(Base):
 
     # Relationships
     pre_info = relationship("PreInfo", back_populates="rec_plans")
-    rec_spots: Mapped[List["RecSpot"]] = relationship(
-        "RecSpot", back_populates="rec_plan", cascade="all, delete-orphan"
-    )
+    # RecSpot relationship은 repository layer에서 처리 (복합키 관계로 인해 복잡함)
 
     # Database indexes for performance
     __table_args__ = (

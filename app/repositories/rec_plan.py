@@ -1,19 +1,18 @@
-from typing import Optional, List
+from typing import Optional, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.models.rec_plan import RecPlan
-from app.repositories.base import BaseRepository
 
 
-class RecPlanRepository(BaseRepository[RecPlan]):
+class RecPlanRepository:
     """
     Repository for RecPlan database operations.
     Follows Repository pattern for data access abstraction.
     """
 
     def __init__(self, db: Session):
-        super().__init__(RecPlan, db)
+        self.db = db
 
     def get_by_plan_id(self, plan_id: str) -> List[RecPlan]:
         """Get all versions of a plan by plan_id"""

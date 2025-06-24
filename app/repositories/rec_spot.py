@@ -4,17 +4,16 @@ from sqlalchemy import desc, and_
 from decimal import Decimal
 
 from app.models.rec_spot import RecSpot, SpotStatus
-from app.repositories.base import BaseRepository
 
 
-class RecSpotRepository(BaseRepository[RecSpot]):
+class RecSpotRepository:
     """
     Repository for RecSpot database operations.
     Handles spot status tracking for different plan versions.
     """
 
     def __init__(self, db: Session):
-        super().__init__(RecSpot, db)
+        self.db = db
 
     def get_spots_by_plan_version(self, plan_id: str, version: int) -> List[RecSpot]:
         """Get all spots for a specific plan version"""
