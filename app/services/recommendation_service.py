@@ -554,5 +554,6 @@ class RecommendationService:
                 "price": place_data.get("price_level", 2) * 1000,
             },
             "google_map_image_url": google_map_image_url,
+            "website_url": place_data.get("website", None),
             "selected": False,
         }

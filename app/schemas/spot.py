@@ -59,6 +59,7 @@ class Spot(BaseModel):
     recommendation_reason: str
     details: SpotDetail
     google_map_image_url: Optional[str] = None
+    website_url: Optional[str] = None
     selected: bool = False
 
 
