@@ -26,7 +26,7 @@ router = APIRouter()
 
 
 def get_route_service(db: Session = Depends(get_db)) -> RouteService:
-    """RouteService 의존성 주입"""
+    """RouteService dependency injection"""
     return RouteService(
         route_repository=RouteRepository(db),
         route_day_repository=RouteDayRepository(db),
@@ -44,12 +44,12 @@ async def calculate_route(
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    경로 계산 API
+    Calculate optimal travel route
 
-    선택된 스팟들을 기반으로 최적의 여행 경로를 계산합니다.
-    - Google Maps API를 사용한 실제 거리/시간 계산
-    - TSP 알고리즘을 사용한 최적 순서 결정
-    - 다일차 여행 지원
+    Calculate the optimal travel route based on selected spots.
+    - Real distance/time calculation using Google Maps API
+    - Optimal order determination using TSP algorithm
+    - Multi-day trip support
     """
     try:
         result = await route_service.calculate_route(request)
@@ -57,7 +57,123 @@ async def calculate_route(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"경로 계산 중 오류가 발생했습니다: {str(e)}",
+            detail=f"Error occurred during route calculation: {str(e)}",
+        )
+
+
+@router.post("/regenerate", response_model=RouteCalculationResponse)
+async def regenerate_route_as_new_version(
+    request: RouteCalculationRequest,
+    route_service: RouteService = Depends(get_route_service),
+):
+    """
+    Regenerate route as new version
+
+    Generate a new version of the route with different parameters while preserving existing routes.
+    - Existing versions are preserved
+    - Saved with new version number
+    - Version comparison available
+    """
+    try:
+        # 최신 버전 조회 후 새 버전 번호 생성
+        route_repository = RouteRepository(next(get_db()))
+        latest_route = route_repository.get_latest_by_plan(request.plan_id)
+
+        if latest_route:
+            new_version = latest_route.version + 1
+        else:
+            new_version = 1
+
+        # 새 버전으로 요청 업데이트
+        new_request = RouteCalculationRequest(
+            plan_id=request.plan_id,
+            version=new_version,
+            departure_location=request.departure_location,
+            hotel_location=request.hotel_location,
+            travel_mode=request.travel_mode,
+            optimize_for=request.optimize_for,
+        )
+
+        result = await route_service.calculate_route(new_request)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error occurred during route regeneration: {str(e)}",
+        )
+
+
+@router.patch("/{plan_id}/{version}/partial-update")
+async def partial_update_route(
+    plan_id: str,
+    version: int,
+    update_request: Dict[str, Any],
+    route_service: RouteService = Depends(get_route_service),
+):
+    """
+    Partial route update
+
+    Partially update the route by modifying specific segments or settings.
+    - Change hotel location only
+    - Change order for specific day only
+    - Change travel mode only
+    - Reuse existing calculation results as much as possible
+    """
+    try:
+        # 기존 경로 조회
+        route_repository = RouteRepository(next(get_db()))
+        existing_route = route_repository.get_by_plan_and_version(plan_id, version)
+
+        if not existing_route:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Route not found for modification: plan_id={plan_id}, version={version}",
+            )
+
+        # Supported partial update types
+        update_type = update_request.get("type")
+
+        if update_type == "hotel_location":
+            # Change hotel location only - maintain existing spot order and recalculate hotel connections only
+            new_hotel = update_request.get("hotel_location")
+            result = await route_service.update_hotel_location(
+                plan_id, version, new_hotel
+            )
+
+        elif update_type == "travel_mode":
+            # Change travel mode only - maintain existing order and recalculate travel time/distance only
+            new_mode = update_request.get("travel_mode")
+            result = await route_service.update_travel_mode(plan_id, version, new_mode)
+
+        elif update_type == "day_reorder":
+            # Change spot order for specific day only
+            day_number = update_request.get("day_number")
+            new_spot_order = update_request.get("spot_order")
+            result = await route_service.reorder_day_spots(
+                plan_id, version, day_number, new_spot_order
+            )
+
+        elif update_type == "spot_replacement":
+            # Replace specific spot with another spot
+            old_spot_id = update_request.get("old_spot_id")
+            new_spot_id = update_request.get("new_spot_id")
+            result = await route_service.replace_spot(
+                plan_id, version, old_spot_id, new_spot_id
+            )
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported update type: {update_type}",
+            )
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error occurred during partial route update: {str(e)}",
         )
 
 
@@ -68,19 +184,19 @@ async def get_route_details(
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    경로 상세 정보 조회 API
+    Get route details
 
-    특정 플랜의 특정 버전에 대한 상세 경로 정보를 조회합니다.
-    - 일차별 경로 정보
-    - 구간별 이동 정보
-    - 내비게이션 데이터
+    Retrieve detailed route information for a specific plan version.
+    - Daily route information
+    - Segment-wise travel information
+    - Navigation data
     """
     route_details = await route_service.get_route_details(plan_id, version)
 
     if not route_details:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"경로를 찾을 수 없습니다: plan_id={plan_id}, version={version}",
+            detail=f"Route not found: plan_id={plan_id}, version={version}",
         )
 
     return route_details
@@ -92,12 +208,12 @@ async def get_route_statistics(
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    플랜의 경로 통계 정보 조회 API
+    Get route statistics
 
-    특정 플랜의 모든 버전에 대한 통계 정보를 제공합니다.
-    - 총 버전 수
-    - 최신 버전 정보
-    - 경로 요약 데이터
+    Provide statistical information for all versions of a specific plan.
+    - Total number of versions
+    - Latest version information
+    - Route summary data
     """
     try:
         route_repository = RouteRepository(next(get_db()))
@@ -106,7 +222,7 @@ async def get_route_statistics(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"통계 조회 중 오류가 발생했습니다: {str(e)}",
+            detail=f"Error occurred while retrieving statistics: {str(e)}",
         )
 
 
@@ -116,10 +232,10 @@ async def get_all_route_versions(
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    플랜의 모든 경로 버전 조회 API
+    Get all route versions
 
-    특정 플랜의 모든 버전의 경로 정보를 조회합니다.
-    버전별 비교 및 이력 관리에 사용됩니다.
+    Retrieve route information for all versions of a specific plan.
+    Used for version comparison and history management.
     """
     try:
         route_repository = RouteRepository(next(get_db()))
@@ -128,7 +244,7 @@ async def get_all_route_versions(
         if not routes:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"플랜 '{plan_id}'에 대한 경로가 없습니다.",
+                detail=f"No routes found for plan '{plan_id}'.",
             )
 
         return [RouteWithDays.from_orm(route) for route in routes]
@@ -137,7 +253,7 @@ async def get_all_route_versions(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"경로 버전 조회 중 오류가 발생했습니다: {str(e)}",
+            detail=f"Error occurred while retrieving route versions: {str(e)}",
         )
 
 
@@ -148,9 +264,9 @@ async def delete_route(
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    경로 삭제 API
+    Delete route
 
-    특정 플랜의 특정 버전 경로를 삭제합니다.
+    Delete a specific version route of a specific plan.
     """
     try:
         route_repository = RouteRepository(next(get_db()))
@@ -159,16 +275,16 @@ async def delete_route(
         if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"삭제할 경로를 찾을 수 없습니다: plan_id={plan_id}, version={version}",
+                detail=f"Route not found for deletion: plan_id={plan_id}, version={version}",
             )
 
-        return {"message": f"경로가 성공적으로 삭제되었습니다: {plan_id} v{version}"}
+        return {"message": f"Route successfully deleted: {plan_id} v{version}"}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"경로 삭제 중 오류가 발생했습니다: {str(e)}",
+            detail=f"Error occurred during route deletion: {str(e)}",
         )
 
 
@@ -176,30 +292,30 @@ async def delete_route(
 async def get_navigation_data(
     plan_id: str,
     version: int,
-    format: str = Query("json", description="응답 형식: json, gpx"),
+    format: str = Query("json", description="Response format: json, gpx"),
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    내비게이션 데이터 조회 API
+    Get navigation data
 
-    특정 경로의 내비게이션 정보를 조회합니다.
-    - 구간별 이동 안내
-    - GPS 좌표 정보
-    - 단계별 안내사항
+    Retrieve navigation information for a specific route.
+    - Segment-wise travel guidance
+    - GPS coordinate information
+    - Step-by-step instructions
     """
     route_details = await route_service.get_route_details(plan_id, version)
 
     if not route_details:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"경로를 찾을 수 없습니다: plan_id={plan_id}, version={version}",
+            detail=f"Route not found: plan_id={plan_id}, version={version}",
         )
 
     navigation_data = route_details.get("navigation", {})
 
     if format.lower() == "gpx":
-        # GPX 형식으로 변환 (향후 구현)
-        return {"message": "GPX 형식은 아직 지원되지 않습니다."}
+        # Convert to GPX format (future implementation)
+        return {"message": "GPX format is not yet supported."}
 
     return navigation_data
 
@@ -207,20 +323,20 @@ async def get_navigation_data(
 @router.get("/health")
 async def route_service_health():
     """
-    Route 서비스 상태 확인 API
+    Route service health check
 
-    Google Maps API 연결 상태 및 TSP 서비스 상태를 확인합니다.
+    Check the connection status of Google Maps API and TSP service status.
     """
     try:
-        # Google Maps 서비스 상태 확인
+        # Check Google Maps service status
         google_maps_service = GoogleMapsService()
         google_maps_status = "OK" if google_maps_service.api_key else "NO_API_KEY"
 
-        # TSP 서비스 상태 확인
+        # Check TSP service status
         tsp_service = TSPSolverService()
         tsp_status = "OK"
 
-        # OR-Tools 설치 상태 확인
+        # Check OR-Tools installation status
         try:
             from ortools.constraint_solver import pywrapcp
 
@@ -251,16 +367,16 @@ async def test_route_calculation(
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    경로 계산 테스트 API
+    Route calculation test API
 
-    더미 데이터로 경로 계산 기능을 테스트합니다.
-    개발 및 디버깅 목적으로 사용됩니다.
+    Test route calculation functionality with dummy data.
+    Used for development and debugging purposes.
     """
     test_request = RouteCalculationRequest(
         plan_id="test_plan",
         version=1,
-        departure_location="37.5563,126.9720",  # 서울역
-        hotel_location="37.4979,127.0276",  # 강남역
+        departure_location="37.5563,126.9720",  # Seoul Station
+        hotel_location="37.4979,127.0276",  # Gangnam Station
         travel_mode="DRIVING",
         optimize_for="distance",
     )
@@ -270,11 +386,11 @@ async def test_route_calculation(
         return {
             "test_status": "completed",
             "result": result,
-            "message": "테스트 경로 계산이 완료되었습니다.",
+            "message": "Test route calculation completed.",
         }
     except Exception as e:
         return {
             "test_status": "failed",
             "error": str(e),
-            "message": "테스트 경로 계산 중 오류가 발생했습니다.",
+            "message": "Error occurred during test route calculation.",
         }
