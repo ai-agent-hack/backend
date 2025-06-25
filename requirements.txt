@@ -32,7 +32,7 @@ uvloop>=0.17.0  # 고성능 이벤트 루프 (Unix만)
 orjson>=3.8.0  # 빠른 JSON 파싱
 httpx>=0.24.0  # 빠른 HTTP 클라이언트
 asyncio-throttle>=1.0.0  # API 율제한 관리
-cachetools>=5.0.0  # 메모리 캐시 유틸리티
+cachetools>=5.0.0  # 메모리 캐시 유틸리티 
 
 # 경로 최적화 라이브러리
 aiohttp>=3.8.0  # 비동기 HTTP 요청
