@@ -1,8 +1,20 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Index
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    ForeignKey,
+    Numeric,
+    Index,
+    Boolean,
+    Text,
+    JSON,
+)
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Optional, Dict, Any
 
 from app.models.base import Base
 
@@ -32,6 +44,22 @@ class RecSpot(Base):
     similarity_score: Mapped[Decimal] = mapped_column(
         Numeric(precision=5, scale=4), nullable=True
     )
+    # New spot detail columns
+    time_slot: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True
+    )  # '오전', '오후', '저녁'
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 8), nullable=True)
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(11, 8), nullable=True)
+    spot_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    spot_details: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )  # congestion, business_hours, etc.
+    recommendation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    website_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    selected: Mapped[Optional[bool]] = mapped_column(
+        Boolean, nullable=True, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -45,6 +73,7 @@ class RecSpot(Base):
         Index("idx_rec_spot_plan_version", "plan_id", "version"),
         Index("idx_rec_spot_status", "status"),
         Index("idx_rec_spot_rank", "plan_id", "version", "rank"),
+        Index("idx_rec_spot_time_slot", "plan_id", "version", "time_slot"),
     )
 
     def __repr__(self) -> str:

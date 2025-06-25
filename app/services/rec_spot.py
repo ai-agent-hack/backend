@@ -42,13 +42,55 @@ class RecSpotService:
             current_spot_ids, previous_spot_ids
         )
 
-        # Create RecSpot records
+        # Create RecSpot records with full details
         spots_data = []
         rank = 1
 
         for time_slot in recommend_spots.recommend_spots:
+            time_slot_name = self._get_time_slot_english_name(time_slot.time_slot)
+
             for spot in time_slot.spots:
                 status = spot_status_map.get(spot.spot_id, SpotStatus.ADD)
+
+                # Build spot_details JSON (convert BusinessHoursPerDay to dict)
+                business_hours_dict = {}
+                if spot.details and spot.details.business_hours:
+                    # Convert BusinessHoursPerDay object to serializable dict
+                    for day_name in [
+                        "MONDAY",
+                        "TUESDAY",
+                        "WEDNESDAY",
+                        "THURSDAY",
+                        "FRIDAY",
+                        "SATURDAY",
+                        "SUNDAY",
+                        "HOLIDAY",
+                    ]:
+                        day_hours = getattr(spot.details.business_hours, day_name, None)
+                        if day_hours:
+                            business_hours_dict[day_name] = {
+                                "open_time": (
+                                    day_hours.open_time.strftime("%H:%M:%S")
+                                    if day_hours.open_time
+                                    else None
+                                ),
+                                "close_time": (
+                                    day_hours.close_time.strftime("%H:%M:%S")
+                                    if day_hours.close_time
+                                    else None
+                                ),
+                            }
+                        else:
+                            business_hours_dict[day_name] = {
+                                "open_time": None,
+                                "close_time": None,
+                            }
+
+                spot_details = {
+                    "congestion": spot.details.congestion if spot.details else [0] * 24,
+                    "business_hours": business_hours_dict,
+                    "price": spot.details.price if spot.details else 0,
+                }
 
                 spots_data.append(
                     {
@@ -58,6 +100,24 @@ class RecSpotService:
                         "rank": rank,
                         "status": status,
                         "similarity_score": None,  # Will be set by vector search service
+                        # New detailed fields
+                        "time_slot": time_slot_name,
+                        "latitude": (
+                            Decimal(str(spot.latitude)) if spot.latitude else None
+                        ),
+                        "longitude": (
+                            Decimal(str(spot.longitude)) if spot.longitude else None
+                        ),
+                        "spot_name": (
+                            spot.details.name
+                            if spot.details
+                            else f"Spot {spot.spot_id}"
+                        ),
+                        "spot_details": spot_details,
+                        "recommendation_reason": spot.recommendation_reason,
+                        "image_url": spot.google_map_image_url,
+                        "website_url": spot.website_url,
+                        "selected": spot.selected,
                     }
                 )
                 rank += 1
@@ -101,32 +161,58 @@ class RecSpotService:
         # Filter only active spots
         active_spots = [spot for spot in rec_spots if spot.is_active]
 
-        # Group spots by time slots (simplified - all in one time slot for now)
-        spots_info = []
+        # Group spots by time slots using actual stored data
+        time_slot_groups = {}
+
         for rec_spot in active_spots:
-            # Create dummy spot data since we only have spot_id in RecSpot
-            # In real implementation, this would fetch full spot details from Places API
-            spots_info.append(
-                Spot(
-                    spot_id=rec_spot.spot_id,
-                    longitude=0.0,  # Placeholder
-                    latitude=0.0,  # Placeholder
-                    recommendation_reason="Saved spot",
-                    details=SpotDetail(
-                        name=f"Spot {rec_spot.spot_id}",
-                        congestion=[0] * 24,
-                        business_hours={},
-                        price=0,
+            # Convert stored time_slot back to TimeSlot enum
+            time_slot = self._english_name_to_time_slot(rec_spot.time_slot or "MORNING")
+
+            if time_slot not in time_slot_groups:
+                time_slot_groups[time_slot] = []
+
+            # Reconstruct business hours from stored JSON
+            business_hours = {}
+            if rec_spot.spot_details and rec_spot.spot_details.get("business_hours"):
+                business_hours = rec_spot.spot_details["business_hours"]
+
+            # Create Spot using real stored data
+            spot = Spot(
+                spot_id=rec_spot.spot_id,
+                longitude=float(rec_spot.longitude) if rec_spot.longitude else 0.0,
+                latitude=float(rec_spot.latitude) if rec_spot.latitude else 0.0,
+                recommendation_reason=rec_spot.recommendation_reason
+                or "Recommended spot",
+                details=SpotDetail(
+                    name=rec_spot.spot_name or f"Spot {rec_spot.spot_id}",
+                    congestion=(
+                        rec_spot.spot_details.get("congestion", [0] * 24)
+                        if rec_spot.spot_details
+                        else [0] * 24
                     ),
-                    selected=True,
-                )
+                    business_hours=business_hours,
+                    price=(
+                        rec_spot.spot_details.get("price", 0)
+                        if rec_spot.spot_details
+                        else 0
+                    ),
+                ),
+                google_map_image_url=rec_spot.image_url,
+                website_url=rec_spot.website_url,
+                selected=rec_spot.selected or False,
             )
 
-        time_slot_spots = [
-            TimeSlotSpots(
-                time_slot=TimeSlot.MORNING, spots=spots_info
-            )  # Simplified time slot
-        ]
+            time_slot_groups[time_slot].append(spot)
+
+        # Convert to TimeSlotSpots format
+        time_slot_spots = []
+        for time_slot in [TimeSlot.MORNING, TimeSlot.AFTERNOON, TimeSlot.NIGHT]:
+            if time_slot in time_slot_groups:
+                time_slot_spots.append(
+                    TimeSlotSpots(
+                        time_slot=time_slot, spots=time_slot_groups[time_slot]
+                    )
+                )
 
         return RecommendSpots(
             recommend_spot_id=(
@@ -213,3 +299,21 @@ class RecSpotService:
                 status_map[spot_id] = SpotStatus.ADD
 
         return status_map
+
+    def _get_time_slot_english_name(self, time_slot: TimeSlot) -> str:
+        """Convert TimeSlot enum to English name"""
+        time_slot_map = {
+            TimeSlot.MORNING: "MORNING",
+            TimeSlot.AFTERNOON: "AFTERNOON",
+            TimeSlot.NIGHT: "NIGHT",
+        }
+        return time_slot_map.get(time_slot, "MORNING")
+
+    def _english_name_to_time_slot(self, english_name: str) -> TimeSlot:
+        """Convert English name to TimeSlot enum"""
+        time_slot_map = {
+            "MORNING": TimeSlot.MORNING,
+            "AFTERNOON": TimeSlot.AFTERNOON,
+            "NIGHT": TimeSlot.NIGHT,
+        }
+        return time_slot_map.get(english_name, TimeSlot.MORNING)
