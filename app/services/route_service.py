@@ -57,50 +57,50 @@ class RouteService:
         self, request: RouteCalculationRequest
     ) -> RouteCalculationResponse:
         """
-        전체 경로 계산 메인 메서드.
-        위에서 설명한 7단계 프로세스를 실행합니다.
+        全体ルート計算メインメソッド。
+        上記で説明した7段階プロセスを実行します。
         """
         start_time = time.time()
 
         try:
             logger.info(
-                f"경로 계산 시작: plan_id={request.plan_id}, version={request.version}"
+                f"ルート計算開始: plan_id={request.plan_id}, version={request.version}"
             )
 
-            # 1️⃣ 스팟 데이터 수집
+            # 1️⃣ スポットデータ収集
             spots_data = await self._collect_spots_data(
                 request.plan_id, request.version
             )
             if not spots_data["selected_spots"]:
                 return RouteCalculationResponse(
-                    success=False, error_message="선택된 스팟이 없습니다."
+                    success=False, error_message="選択されたスポットがありません。"
                 )
 
-            # departure_location이 없으면 PreInfo에서 자동 추출
+            # departure_locationがない場合、PreInfoから自動抽出
             departure_location = request.departure_location
             if not departure_location and spots_data.get("pre_info"):
                 departure_location = spots_data["pre_info"].departure_location
-                logger.info(f"PreInfo에서 출발지 자동 추출: {departure_location}")
+                logger.info(f"PreInfoから出発地を自動抽出: {departure_location}")
 
             if not departure_location:
                 return RouteCalculationResponse(
-                    success=False, error_message="출발지 정보가 없습니다."
+                    success=False, error_message="出発地情報がありません。"
                 )
 
-            # 2️⃣ 좌표 변환
+            # 2️⃣ 座標変換
             locations, location_mapping = self._create_location_coordinates(
                 spots_data, departure_location, request.hotel_location
             )
 
-            # 3️⃣ 거리 매트릭스 계산
+            # 3️⃣ 距離マトリクス計算
             distance_matrix = await self.google_maps_service.batch_distance_calculation(
                 locations, request.travel_mode
             )
 
-            # 4️⃣ 일차별 그룹화
+            # 4️⃣ 日別グループ化
             days_assignment = self._assign_spots_to_days(spots_data["selected_spots"])
 
-            # 5️⃣ TSP 해결
+            # 5️⃣ TSP解決
             tsp_solutions = self.tsp_solver_service.solve_multi_day_tsp(
                 locations=locations,
                 distance_matrix=distance_matrix,
@@ -110,19 +110,19 @@ class RouteService:
                 optimize_for=request.optimize_for,
             )
 
-            # 6️⃣ 상세 경로 생성
+            # 6️⃣ 詳細ルート生成
             detailed_routes = await self._generate_detailed_routes(
                 tsp_solutions, locations, request.travel_mode
             )
 
-            # 7️⃣ 데이터베이스 저장
+            # 7️⃣ データベース保存
             route = await self._save_route_data(
                 request, spots_data, tsp_solutions, detailed_routes, locations
             )
 
             calculation_time = time.time() - start_time
             logger.info(
-                f"경로 계산 완료: route_id={route.id}, 소요시간={calculation_time:.2f}s"
+                f"ルート計算完了: route_id={route.id}, 所要時間={calculation_time:.2f}s"
             )
 
             return RouteCalculationResponse(
@@ -138,7 +138,7 @@ class RouteService:
 
         except Exception as e:
             calculation_time = time.time() - start_time
-            logger.error(f"경로 계산 실패: {e}", exc_info=True)
+            logger.error(f"ルート計算失敗: {e}", exc_info=True)
 
             return RouteCalculationResponse(
                 success=False,
@@ -147,19 +147,19 @@ class RouteService:
             )
 
     async def _collect_spots_data(self, plan_id: str, version: int) -> Dict[str, Any]:
-        """1️⃣ 스팟 데이터 수집"""
+        """1️⃣ スポットデータ収集"""
         selected_spots = self.rec_spot_repository.get_selected_spots_by_plan_version(
             plan_id, version
         )
 
-        # 시간대별 분류
+        # 時間帯別分類
         spots_by_time_slot = {"MORNING": [], "AFTERNOON": [], "NIGHT": []}
 
         for spot in selected_spots:
-            time_slot = spot.time_slot or "AFTERNOON"  # 기본값
+            time_slot = spot.time_slot or "AFTERNOON"  # デフォルト値
             spots_by_time_slot[time_slot].append(spot)
 
-        # 여행 기간 정보
+        # 旅行期間情報
         pre_info = self.pre_info_repository.get_by_plan_id(plan_id)
         total_days = self._calculate_total_days(pre_info) if pre_info else 1
 
@@ -176,7 +176,7 @@ class RouteService:
         departure_location: str,
         hotel_location: Optional[str],
     ) -> Tuple[List[LocationCoordinate], Dict[str, int]]:
-        """2️⃣ 좌표 변환"""
+        """2️⃣ 座標変換"""
         locations = []
         location_mapping = {}
 

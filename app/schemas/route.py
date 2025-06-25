@@ -8,7 +8,7 @@ from decimal import Decimal
 
 
 class RouteBase(BaseModel):
-    """Route 기본 스키마"""
+    """Route基本スキーマ"""
 
     plan_id: str = Field(..., max_length=50)
     version: int = Field(..., ge=1)
@@ -18,7 +18,7 @@ class RouteBase(BaseModel):
 
 
 class RouteCreate(RouteBase):
-    """Route 생성 스키마"""
+    """Route作成スキーマ"""
 
     total_distance_km: Optional[Decimal] = None
     total_duration_minutes: Optional[int] = None
@@ -27,7 +27,7 @@ class RouteCreate(RouteBase):
 
 
 class RouteUpdate(BaseModel):
-    """Route 업데이트 스키마"""
+    """Route更新スキーマ"""
 
     total_days: Optional[int] = Field(None, ge=1)
     departure_location: Optional[str] = Field(None, max_length=200)
@@ -39,7 +39,7 @@ class RouteUpdate(BaseModel):
 
 
 class Route(RouteBase):
-    """Route 응답 스키마"""
+    """Routeレスポンススキーマ"""
 
     id: int
     total_distance_km: Optional[float]
@@ -56,7 +56,7 @@ class Route(RouteBase):
 
 
 class RouteDayBase(BaseModel):
-    """RouteDay 기본 스키마"""
+    """RouteDay基本スキーマ"""
 
     day_number: int = Field(..., ge=1)
     start_location: Optional[str] = Field(None, max_length=200)
@@ -65,7 +65,7 @@ class RouteDayBase(BaseModel):
 
 
 class RouteDayCreate(RouteDayBase):
-    """RouteDay 생성 스키마"""
+    """RouteDay作成スキーマ"""
 
     route_id: int
     day_distance_km: Optional[Decimal] = None
@@ -74,7 +74,7 @@ class RouteDayCreate(RouteDayBase):
 
 
 class RouteDayUpdate(BaseModel):
-    """RouteDay 업데이트 스키마"""
+    """RouteDay更新スキーマ"""
 
     start_location: Optional[str] = Field(None, max_length=200)
     end_location: Optional[str] = Field(None, max_length=200)
@@ -85,7 +85,7 @@ class RouteDayUpdate(BaseModel):
 
 
 class RouteDay(RouteDayBase):
-    """RouteDay 응답 스키마"""
+    """RouteDayレスポンススキーマ"""
 
     id: int
     route_id: int
@@ -101,17 +101,17 @@ class RouteDay(RouteDayBase):
 
 
 class RouteSegmentBase(BaseModel):
-    """RouteSegment 기본 스키마"""
+    """RouteSegment基本スキーマ"""
 
     segment_order: int = Field(..., ge=1)
     from_location: Optional[str] = Field(None, max_length=200)
     to_spot_id: Optional[str] = Field(None, max_length=100)
     to_spot_name: Optional[str] = Field(None, max_length=200)
-    travel_mode: str = Field("DRIVING", max_length=20)
+    travel_mode: str = Field("TRANSIT", max_length=20)
 
 
 class RouteSegmentCreate(RouteSegmentBase):
-    """RouteSegment 생성 스키마"""
+    """RouteSegment作成スキーマ"""
 
     route_day_id: int
     distance_meters: Optional[int] = None
@@ -120,7 +120,7 @@ class RouteSegmentCreate(RouteSegmentBase):
 
 
 class RouteSegmentUpdate(BaseModel):
-    """RouteSegment 업데이트 스키마"""
+    """RouteSegment更新スキーマ"""
 
     from_location: Optional[str] = Field(None, max_length=200)
     to_spot_id: Optional[str] = Field(None, max_length=100)
@@ -132,7 +132,7 @@ class RouteSegmentUpdate(BaseModel):
 
 
 class RouteSegment(RouteSegmentBase):
-    """RouteSegment 응답 스키마"""
+    """RouteSegmentレスポンススキーマ"""
 
     id: int
     route_day_id: int
@@ -148,19 +148,19 @@ class RouteSegment(RouteSegmentBase):
 
 
 class RouteWithDays(Route):
-    """일차별 경로를 포함한 Route 스키마"""
+    """日別ルートを含むRouteスキーマ"""
 
     route_days: List[RouteDay] = []
 
 
 class RouteDayWithSegments(RouteDay):
-    """구간을 포함한 RouteDay 스키마"""
+    """セグメントを含むRouteDayスキーマ"""
 
     route_segments: List[RouteSegment] = []
 
 
 class RouteFullDetail(Route):
-    """모든 하위 데이터를 포함한 Route 스키마"""
+    """すべてのサブデータを含むRouteスキーマ"""
 
     route_days: List[RouteDayWithSegments] = []
 
@@ -169,18 +169,18 @@ class RouteFullDetail(Route):
 
 
 class RouteCalculationRequest(BaseModel):
-    """경로 계산 요청 스키마"""
+    """ルート計算リクエストスキーマ"""
 
     plan_id: str
     version: int
     departure_location: Optional[str] = None
     hotel_location: Optional[str] = None
-    travel_mode: str = Field("DRIVING", max_length=20)
+    travel_mode: str = Field("TRANSIT", max_length=20)
     optimize_for: str = Field("distance", description="distance or time")
 
 
 class RouteCalculationResponse(BaseModel):
-    """경로 계산 응답 스키마"""
+    """ルート計算レスポンススキーマ"""
 
     success: bool
     route_id: Optional[int] = None
@@ -192,7 +192,7 @@ class RouteCalculationResponse(BaseModel):
 
 
 class RouteStatistics(BaseModel):
-    """경로 통계 정보 스키마"""
+    """ルート統計情報スキーマ"""
 
     total_versions: int
     latest_version: int
@@ -207,7 +207,7 @@ class RouteStatistics(BaseModel):
 
 
 class NavigationStep(BaseModel):
-    """내비게이션 단계 스키마"""
+    """ナビゲーションステップスキーマ"""
 
     instruction: str
     distance_meters: int
@@ -216,7 +216,7 @@ class NavigationStep(BaseModel):
 
 
 class RouteNavigation(BaseModel):
-    """내비게이션 정보 스키마"""
+    """ナビゲーション情報スキーマ"""
 
     route_id: int
     plan_id: str
