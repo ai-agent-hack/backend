@@ -41,6 +41,24 @@ class RecSpotRepository:
             .all()
         )
 
+    def get_selected_spots_by_plan_version(
+        self, plan_id: str, version: int
+    ) -> List[RecSpot]:
+        """Get selected spots (selected=True) for route calculation"""
+        return (
+            self.db.query(RecSpot)
+            .filter(
+                and_(
+                    RecSpot.plan_id == plan_id,
+                    RecSpot.version == version,
+                    RecSpot.selected == True,
+                    RecSpot.status.in_([SpotStatus.ADD, SpotStatus.KEEP]),
+                )
+            )
+            .order_by(RecSpot.rank)
+            .all()
+        )
+
     def get_spot_by_plan_version_and_spot_id(
         self, plan_id: str, version: int, spot_id: str
     ) -> Optional[RecSpot]:

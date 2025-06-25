@@ -43,6 +43,10 @@ class RouteDay(Base):
         JSONB, nullable=True
     )
 
+    # Override Base's created_at and updated_at
+    created_at = None
+    updated_at = None
+
     # Relationships
     route: Mapped["Route"] = relationship("Route", back_populates="route_days")
     route_segments: Mapped[List["RouteSegment"]] = relationship(

@@ -46,3 +46,14 @@ class PreInfoRepository(BaseRepository[PreInfo, PreInfoRequest, PreInfoUpdate]):
             .filter(and_(PreInfo.id == pre_info_id, PreInfo.user_id == user_id))
             .first()
         )
+
+    def get_by_plan_id(self, plan_id: str) -> Optional[PreInfo]:
+        """plan_id를 통해 PreInfo를 조회"""
+        from app.models.rec_plan import RecPlan
+
+        return (
+            self.db.query(PreInfo)
+            .join(RecPlan)
+            .filter(RecPlan.plan_id == plan_id)
+            .first()
+        )

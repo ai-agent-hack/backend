@@ -51,6 +51,10 @@ class Route(Base):
         JSONB, nullable=True
     )
 
+    # Override Base's created_at and updated_at (Route uses calculated_at instead)
+    created_at = None
+    updated_at = None
+
     # Relationships
     route_days: Mapped[List["RouteDay"]] = relationship(
         "RouteDay",
