@@ -125,6 +125,41 @@ class RouteService:
                 f"ルート計算完了: route_id={route.id}, 所要時間={calculation_time:.2f}s"
             )
 
+            # 추가 상세 정보 생성
+            route_summary = {
+                "route_id": route.id,
+                "plan_id": route.plan_id,
+                "version": route.version,
+                "total_days": route.total_days,
+                "departure_location": route.departure_location,
+                "hotel_location": route.hotel_location,
+                "calculated_at": (
+                    route.calculated_at.isoformat() if route.calculated_at else None
+                ),
+            }
+
+            daily_summary = []
+            for day, solution in tsp_solutions.items():
+                day_info = {
+                    "day_number": day,
+                    "spots_count": len(
+                        [idx for idx in solution.optimal_order if idx >= 2]
+                    ),  # exclude departure/hotel
+                    "distance_km": round(solution.total_distance_meters / 1000, 2),
+                    "duration_minutes": solution.total_duration_seconds // 60,
+                    "optimization_time_seconds": solution.solve_time_seconds,
+                }
+                daily_summary.append(day_info)
+
+            optimization_details = {
+                "travel_mode": request.travel_mode,
+                "optimize_for": request.optimize_for,
+                "total_locations_processed": len(locations),
+                "tsp_solutions_count": len(tsp_solutions),
+                "google_maps_api_calls": len(tsp_solutions)
+                * 2,  # distance matrix + directions per day
+            }
+
             return RouteCalculationResponse(
                 success=True,
                 route_id=route.id,
@@ -134,6 +169,9 @@ class RouteService:
                 total_duration_minutes=route.total_duration_minutes,
                 total_spots_count=route.total_spots_count,
                 calculation_time_seconds=calculation_time,
+                route_summary=route_summary,
+                daily_summary=daily_summary,
+                optimization_details=optimization_details,
             )
 
         except Exception as e:
@@ -391,6 +429,7 @@ class RouteService:
                     matching_spot = spot
                     break
 
+            # 기본 정보
             spot_data = {
                 "order": order,
                 "location_index": location_idx,
@@ -401,6 +440,47 @@ class RouteService:
                 "spot_id": matching_spot.spot_id if matching_spot else None,
                 "time_slot": matching_spot.time_slot if matching_spot else None,
             }
+
+            # 매칭되는 스팟이 있으면 상세 정보 추가
+            if matching_spot:
+                spot_data.update(
+                    {
+                        "spot_name": matching_spot.spot_name,
+                        "recommendation_reason": matching_spot.recommendation_reason,
+                        "image_url": matching_spot.image_url,
+                        "website_url": matching_spot.website_url,
+                        "selected": matching_spot.selected,
+                        "similarity_score": (
+                            float(matching_spot.similarity_score)
+                            if matching_spot.similarity_score
+                            else None
+                        ),
+                        # 상세 정보 (spot_details에서 추출)
+                        "details": (
+                            {
+                                "congestion": (
+                                    matching_spot.spot_details.get(
+                                        "congestion", [0] * 24
+                                    )
+                                    if matching_spot.spot_details
+                                    else [0] * 24
+                                ),
+                                "business_hours": (
+                                    matching_spot.spot_details.get("business_hours", {})
+                                    if matching_spot.spot_details
+                                    else {}
+                                ),
+                                "price": (
+                                    matching_spot.spot_details.get("price", 0)
+                                    if matching_spot.spot_details
+                                    else 0
+                                ),
+                            }
+                            if matching_spot.spot_details
+                            else None
+                        ),
+                    }
+                )
             ordered_spots.append(spot_data)
 
         return {
@@ -546,6 +626,76 @@ class RouteService:
             route_data["route_days"].append(day_data)
 
         return route_data
+
+    async def get_route_full_details(
+        self,
+        plan_id: str,
+        version: int,
+        calculation_time_seconds: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        RouteFullDetail 스키마에 맞는 완전한 상세 정보 조회
+        계산 직후 호출 시 calculation_time_seconds를 전달할 수 있음
+        """
+        route = self.route_repository.get_with_details(
+            plan_id, version, include_segments=True
+        )
+
+        if not route:
+            return None
+
+        # 기본 route 정보 생성
+        route_details = await self.get_route_details(plan_id, version)
+
+        # 추가 상세 정보 생성
+        route_summary = {
+            "route_id": route.id,
+            "plan_id": route.plan_id,
+            "version": route.version,
+            "total_days": route.total_days,
+            "departure_location": route.departure_location,
+            "hotel_location": route.hotel_location,
+            "calculated_at": (
+                route.calculated_at.isoformat() if route.calculated_at else None
+            ),
+        }
+
+        daily_summary = []
+        for route_day in route.route_days:
+            # ordered_spots에서 실제 스팟 개수 계산
+            ordered_spots = route_day.ordered_spots or {}
+            spots_count = len(ordered_spots.get("spots", []))
+
+            day_info = {
+                "day_number": route_day.day_number,
+                "spots_count": spots_count,
+                "distance_km": (
+                    float(route_day.day_distance_km) if route_day.day_distance_km else 0
+                ),
+                "duration_minutes": route_day.day_duration_minutes or 0,
+                "start_location": route_day.start_location,
+                "end_location": route_day.end_location,
+            }
+            daily_summary.append(day_info)
+
+        optimization_details = {
+            "total_days": route.total_days,
+            "total_locations_processed": route.total_spots_count or 0,
+            "google_maps_data_available": route.google_maps_data is not None,
+            "calculation_method": "TSP_optimization",
+        }
+
+        # RouteFullDetail 형태로 결합
+        full_details = {
+            **route_details,
+            "route_summary": route_summary,
+            "daily_summary": daily_summary,
+            "optimization_details": optimization_details,
+            "calculation_time_seconds": calculation_time_seconds,
+            "created_by_calculation": calculation_time_seconds is not None,
+        }
+
+        return full_details
 
     def _create_navigation_data(self, route) -> Dict[str, Any]:
         """내비게이션 데이터 생성"""
