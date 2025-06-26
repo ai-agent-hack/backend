@@ -42,5 +42,5 @@ RUN chmod +x /app/run_migrations.sh && chown -R fastapi:fastapi /app
 # Expose port (Cloud Run uses PORT environment variable)
 EXPOSE 8000
 
-# Run the application with Cloud Run optimized settings
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"] 
+# Run the application with migrations first
+CMD ["/app/run_migrations.sh"] 
