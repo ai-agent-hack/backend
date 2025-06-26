@@ -46,7 +46,13 @@ app.add_middleware(
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=(
-        ["*"] if settings.ENVIRONMENT == "development" else ["yourdomain.com"]
+        ["*"]
+        if settings.ENVIRONMENT == "development"
+        else [
+            "yourdomain.com",
+            "*.run.app",  # Allow Cloud Run URLs
+            "fastapi-backend-900145575342.asia-northeast1.run.app",
+        ]
     ),
 )
 

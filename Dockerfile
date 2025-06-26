@@ -34,14 +34,13 @@ COPY ./alembic.ini /app/alembic.ini
 
 # Make script executable and change ownership to non-root user
 RUN chmod +x /app/run_migrations.sh && chown -R fastapi:fastapi /app
-USER fastapi
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Health check (removed for Cloud Run compatibility)
+# HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:8000/health || exit 1
 
-# Expose port
+# Expose port (Cloud Run uses PORT environment variable)
 EXPOSE 8000
 
-# Run the application with multiple workers for production
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"] 
+# Run the application with Cloud Run optimized settings
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"] 
