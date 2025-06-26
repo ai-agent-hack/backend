@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Google Cloud設定
     GOOGLE_CLOUD_PROJECT: Optional[str] = None
+    GOOGLE_MAPS_API_KEY: Optional[str] = None
 
     # CORS設定
     BACKEND_CORS_ORIGINS: List[str] = [

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import firebase_auth, vertex, trip, pre_info
+from app.api.v1.endpoints import firebase_auth, vertex, trip, pre_info, route
 
 api_router = APIRouter()
 
@@ -17,3 +17,6 @@ api_router.include_router(trip.router, prefix="/trip", tags=["trip"])
 
 # Include pre_info routes
 api_router.include_router(pre_info.router, prefix="/pre_info", tags=["pre_info"])
+
+# Include route routes
+api_router.include_router(route.router, prefix="/route", tags=["route"])
