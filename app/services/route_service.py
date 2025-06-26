@@ -486,11 +486,66 @@ class RouteService:
         if not route:
             return None
 
-        return {
-            "route_summary": route.to_summary_dict(),
-            "days": [day.to_detail_dict() for day in route.route_days],
-            "navigation": self._create_navigation_data(route),
+        # Route 스키마에 맞는 형태로 데이터 구성
+        route_data = {
+            # 기본 Route 필드들
+            "id": route.id,
+            "plan_id": route.plan_id,
+            "version": route.version,
+            "total_days": route.total_days,
+            "departure_location": route.departure_location,
+            "hotel_location": route.hotel_location,
+            "total_distance_km": (
+                float(route.total_distance_km) if route.total_distance_km else None
+            ),
+            "total_duration_minutes": route.total_duration_minutes,
+            "total_spots_count": route.total_spots_count,
+            "calculated_at": route.calculated_at,
+            "google_maps_data": route.google_maps_data,
+            # RouteDay와 RouteSegment 포함
+            "route_days": [],
         }
+
+        # RouteDay 데이터 추가
+        for route_day in route.route_days:
+            day_data = {
+                # 기본 RouteDay 필드들
+                "id": route_day.id,
+                "route_id": route_day.route_id,
+                "day_number": route_day.day_number,
+                "start_location": route_day.start_location,
+                "end_location": route_day.end_location,
+                "day_distance_km": (
+                    float(route_day.day_distance_km)
+                    if route_day.day_distance_km
+                    else None
+                ),
+                "day_duration_minutes": route_day.day_duration_minutes,
+                "ordered_spots": route_day.ordered_spots,
+                "route_geometry": route_day.route_geometry,
+                # RouteSegment 포함
+                "route_segments": [],
+            }
+
+            # RouteSegment 데이터 추가
+            for segment in route_day.route_segments:
+                segment_data = {
+                    "id": segment.id,
+                    "route_day_id": segment.route_day_id,
+                    "segment_order": segment.segment_order,
+                    "from_location": segment.from_location,
+                    "to_spot_id": segment.to_spot_id,
+                    "to_spot_name": segment.to_spot_name,
+                    "distance_meters": segment.distance_meters,
+                    "duration_seconds": segment.duration_seconds,
+                    "travel_mode": segment.travel_mode,
+                    "directions_steps": segment.directions_steps,
+                }
+                day_data["route_segments"].append(segment_data)
+
+            route_data["route_days"].append(day_data)
+
+        return route_data
 
     def _create_navigation_data(self, route) -> Dict[str, Any]:
         """내비게이션 데이터 생성"""
@@ -544,18 +599,32 @@ class RouteService:
             if route_day.route_segments:
                 # 마지막 구간을 새 호텔 위치로 업데이트
                 last_segment = route_day.route_segments[-1]
-
-                # Google Maps API로 새 거리/시간 계산
-                # (실제 구현에서는 Google Maps Service 호출)
-                # 임시로 기존 값 유지
-
-                day_distance = (
-                    float(route_day.day_distance_km) if route_day.day_distance_km else 0
+                last_segment.from_location = (
+                    last_segment.to_spot_name or last_segment.from_location
                 )
-                day_duration = route_day.day_duration_minutes or 0
+                last_segment.to_spot_name = new_hotel_location
 
-                total_distance_km += day_distance
-                total_duration_minutes += day_duration
+                # Google Maps API로 새 거리/시간 계산 (실제 구현에서는 실제 API 호출)
+                # 임시로 기존 값 사용하되, 호텔까지의 구간 시간을 추정
+                estimated_hotel_distance = 5000  # 5km 추정
+                estimated_hotel_duration = 20 * 60  # 20분 추정
+
+                last_segment.distance_meters = estimated_hotel_distance
+                last_segment.duration_seconds = estimated_hotel_duration
+
+                # 일차별 총합 재계산
+                day_distance_meters = sum(
+                    seg.distance_meters or 0 for seg in route_day.route_segments
+                )
+                day_duration_seconds = sum(
+                    seg.duration_seconds or 0 for seg in route_day.route_segments
+                )
+
+                route_day.day_distance_km = Decimal(str(day_distance_meters / 1000))
+                route_day.day_duration_minutes = day_duration_seconds // 60
+
+                total_distance_km += day_distance_meters / 1000
+                total_duration_minutes += day_duration_seconds // 60
 
         # 4. 전체 경로 요약 업데이트
         route.total_distance_km = Decimal(str(total_distance_km))
@@ -587,22 +656,46 @@ class RouteService:
         if not route:
             raise ValueError(f"Route not found: {plan_id} v{version}")
 
-        # 2. 모든 구간의 travel_mode 업데이트
+        # 2. 모든 구간의 travel_mode 업데이트 및 시간/거리 재계산
         total_distance_km = 0
         total_duration_minutes = 0
 
         for route_day in route.route_days:
+            day_distance_meters = 0
+            day_duration_seconds = 0
+
             for segment in route_day.route_segments:
                 segment.travel_mode = new_travel_mode
-                # 실제로는 Google Maps API로 새 이동 시간/거리 재계산 필요
 
-            day_distance = (
-                float(route_day.day_distance_km) if route_day.day_distance_km else 0
-            )
-            day_duration = route_day.day_duration_minutes or 0
+                # 이동 수단에 따른 시간/거리 조정 (실제로는 Google Maps API 사용)
+                if segment.distance_meters and segment.duration_seconds:
+                    base_distance = segment.distance_meters
 
-            total_distance_km += day_distance
-            total_duration_minutes += day_duration
+                    if new_travel_mode == "DRIVING":
+                        # 자동차: 빠른 속도
+                        segment.duration_seconds = int(
+                            base_distance / 1000 * 60 * 1.5
+                        )  # 시속 40km 가정
+                    elif new_travel_mode == "WALKING":
+                        # 도보: 느린 속도
+                        segment.duration_seconds = int(
+                            base_distance / 1000 * 60 * 12
+                        )  # 시속 5km 가정
+                    elif new_travel_mode == "TRANSIT":
+                        # 대중교통: 중간 속도
+                        segment.duration_seconds = int(
+                            base_distance / 1000 * 60 * 2.5
+                        )  # 시속 24km 가정
+
+                day_distance_meters += segment.distance_meters or 0
+                day_duration_seconds += segment.duration_seconds or 0
+
+            # 일차별 총합 업데이트
+            route_day.day_distance_km = Decimal(str(day_distance_meters / 1000))
+            route_day.day_duration_minutes = day_duration_seconds // 60
+
+            total_distance_km += day_distance_meters / 1000
+            total_duration_minutes += day_duration_seconds // 60
 
         # 3. 전체 경로 요약 업데이트
         route.total_distance_km = Decimal(str(total_distance_km))
@@ -660,10 +753,68 @@ class RouteService:
 
             target_day.ordered_spots["spots"] = reordered_spots
 
-        # 4. 해당 일차의 구간들 재계산 (실제로는 TSP 재실행 필요)
-        # 임시로 기존 값 유지
+        # 4. 해당 일차의 구간들 재계산
+        # 새 순서에 맞게 segment들을 재생성
+        if target_day.route_segments:
+            # 기존 segment들 삭제
+            for segment in target_day.route_segments:
+                self.route_repository.db.delete(segment)
 
-        # 5. 데이터베이스 업데이트
+            # 새 순서로 segment들 재생성
+            new_segments = []
+            for i in range(len(new_spot_order)):
+                from_location = (
+                    reordered_spots[i]["name"] if i < len(reordered_spots) else None
+                )
+                to_location = (
+                    reordered_spots[i + 1]["name"]
+                    if i + 1 < len(reordered_spots)
+                    else target_day.end_location
+                )
+
+                if from_location and to_location:
+                    # 추정 거리/시간 (실제로는 Google Maps API 사용)
+                    estimated_distance = 2000  # 2km 추정
+                    estimated_duration = 10 * 60  # 10분 추정
+
+                    segment_data = {
+                        "route_day_id": target_day.id,
+                        "segment_order": i + 1,
+                        "from_location": from_location,
+                        "to_spot_name": to_location,
+                        "distance_meters": estimated_distance,
+                        "duration_seconds": estimated_duration,
+                        "travel_mode": "TRANSIT",  # 기본값
+                    }
+
+                    from app.models.route_segment import RouteSegment
+
+                    new_segment = RouteSegment(**segment_data)
+                    self.route_repository.db.add(new_segment)
+                    new_segments.append(new_segment)
+
+            # 일차별 총합 재계산
+            day_distance_meters = sum(seg.distance_meters or 0 for seg in new_segments)
+            day_duration_seconds = sum(
+                seg.duration_seconds or 0 for seg in new_segments
+            )
+
+            target_day.day_distance_km = Decimal(str(day_distance_meters / 1000))
+            target_day.day_duration_minutes = day_duration_seconds // 60
+
+        # 5. 전체 경로 총합 재계산
+        total_distance_km = sum(
+            float(day.day_distance_km) if day.day_distance_km else 0
+            for day in route.route_days
+        )
+        total_duration_minutes = sum(
+            day.day_duration_minutes or 0 for day in route.route_days
+        )
+
+        route.total_distance_km = Decimal(str(total_distance_km))
+        route.total_duration_minutes = total_duration_minutes
+
+        # 6. 데이터베이스 업데이트
         self.route_repository.db.commit()
 
         return {
@@ -671,6 +822,10 @@ class RouteService:
             "message": f"{day_number}일차 스팟 순서가 성공적으로 변경되었습니다",
             "updated_day": day_number,
             "new_spot_order": new_spot_order,
+            "new_day_distance_km": (
+                float(target_day.day_distance_km) if target_day.day_distance_km else 0
+            ),
+            "new_day_duration_minutes": target_day.day_duration_minutes or 0,
         }
 
     async def replace_spot(

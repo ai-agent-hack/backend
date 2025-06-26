@@ -235,31 +235,6 @@ async def partial_update_route(
         )
 
 
-@router.get("/{plan_id}/{version}", response_model=RouteFullDetail)
-async def get_route_details(
-    plan_id: str,
-    version: int,
-    route_service: RouteService = Depends(get_route_service),
-):
-    """
-    Get route details
-
-    Retrieve detailed route information for a specific plan version.
-    - Daily route information
-    - Segment-wise travel information
-    - Navigation data
-    """
-    route_details = await route_service.get_route_details(plan_id, version)
-
-    if not route_details:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Route not found: plan_id={plan_id}, version={version}",
-        )
-
-    return route_details
-
-
 @router.get("/{plan_id}/statistics", response_model=RouteStatistics)
 async def get_route_statistics(
     plan_id: str,
@@ -315,35 +290,29 @@ async def get_all_route_versions(
         )
 
 
-@router.delete("/{plan_id}/{version}")
-async def delete_route(
+@router.get("/{plan_id}/{version}", response_model=RouteFullDetail)
+async def get_route_details(
     plan_id: str,
     version: int,
     route_service: RouteService = Depends(get_route_service),
 ):
     """
-    Delete route
+    Get route details
 
-    Delete a specific version route of a specific plan.
+    Retrieve detailed route information for a specific plan version.
+    - Daily route information
+    - Segment-wise travel information
+    - Navigation data
     """
-    try:
-        route_repository = RouteRepository(next(get_db()))
-        deleted = route_repository.delete_by_plan_and_version(plan_id, version)
+    route_details = await route_service.get_route_details(plan_id, version)
 
-        if not deleted:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Route not found for deletion: plan_id={plan_id}, version={version}",
-            )
-
-        return {"message": f"Route successfully deleted: {plan_id} v{version}"}
-    except HTTPException:
-        raise
-    except Exception as e:
+    if not route_details:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error occurred during route deletion: {str(e)}",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Route not found: plan_id={plan_id}, version={version}",
         )
+
+    return route_details
 
 
 @router.get("/{plan_id}/{version}/navigation")
@@ -376,6 +345,37 @@ async def get_navigation_data(
         return {"message": "GPX format is not yet supported."}
 
     return navigation_data
+
+
+@router.delete("/{plan_id}/{version}")
+async def delete_route(
+    plan_id: str,
+    version: int,
+    route_service: RouteService = Depends(get_route_service),
+):
+    """
+    Delete route
+
+    Delete a specific version route of a specific plan.
+    """
+    try:
+        route_repository = RouteRepository(next(get_db()))
+        deleted = route_repository.delete_by_plan_and_version(plan_id, version)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Route not found for deletion: plan_id={plan_id}, version={version}",
+            )
+
+        return {"message": f"Route successfully deleted: {plan_id} v{version}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error occurred during route deletion: {str(e)}",
+        )
 
 
 @router.get("/health")
