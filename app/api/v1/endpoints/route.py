@@ -20,6 +20,7 @@ from app.repositories.route import (
 )
 from app.repositories.rec_spot import RecSpotRepository
 from app.repositories.pre_info import PreInfoRepository
+from app.repositories.rec_plan import RecPlanRepository
 
 
 router = APIRouter()
@@ -65,6 +66,7 @@ async def calculate_route(
 async def regenerate_route_as_new_version(
     request: RouteCalculationRequest,
     route_service: RouteService = Depends(get_route_service),
+    db: Session = Depends(get_db),
 ):
     """
     Regenerate route as new version
@@ -76,13 +78,69 @@ async def regenerate_route_as_new_version(
     """
     try:
         # 최신 버전 조회 후 새 버전 번호 생성
-        route_repository = RouteRepository(next(get_db()))
+        route_repository = RouteRepository(db)
+        rec_spot_repository = RecSpotRepository(db)
+        rec_plan_repository = RecPlanRepository(db)
+
         latest_route = route_repository.get_latest_by_plan(request.plan_id)
 
         if latest_route:
             new_version = latest_route.version + 1
         else:
             new_version = 1
+
+        # 기존 버전에서 선택된 스팟들을 새 버전으로 복사
+        if request.version:
+            # 기존 RecPlan에서 pre_info_id 가져오기
+            existing_plan = rec_plan_repository.get_by_plan_id_and_version(
+                request.plan_id, request.version
+            )
+            if not existing_plan:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Plan not found: plan_id={request.plan_id}, version={request.version}",
+                )
+
+            # 새 버전의 RecPlan 생성
+            from app.models.rec_plan import RecPlan
+
+            new_plan = RecPlan(
+                plan_id=request.plan_id,
+                version=new_version,
+                pre_info_id=existing_plan.pre_info_id,
+            )
+            db.add(new_plan)
+            db.commit()
+            db.refresh(new_plan)
+
+            existing_spots = rec_spot_repository.get_selected_spots_by_plan_version(
+                request.plan_id, request.version
+            )
+            if existing_spots:
+                # 기존 스팟들을 새 버전으로 복사
+                new_spots_data = []
+                for spot in existing_spots:
+                    spot_data = {
+                        "plan_id": request.plan_id,
+                        "version": new_version,
+                        "spot_id": spot.spot_id,
+                        "rank": spot.rank,
+                        "status": "ADD",  # 새 버전에서는 모두 ADD 상태
+                        "selected": True,  # 새 버전에서는 모두 선택됨
+                        "time_slot": spot.time_slot,
+                        "spot_name": spot.spot_name,
+                        "latitude": spot.latitude,
+                        "longitude": spot.longitude,
+                        "spot_details": spot.spot_details,
+                        "recommendation_reason": spot.recommendation_reason,
+                        "image_url": spot.image_url,
+                        "website_url": spot.website_url,
+                        "similarity_score": spot.similarity_score,
+                    }
+                    new_spots_data.append(spot_data)
+
+                # 새 버전으로 스팟들 생성
+                rec_spot_repository.create_spots_batch(new_spots_data)
 
         # 새 버전으로 요청 업데이트
         new_request = RouteCalculationRequest(
