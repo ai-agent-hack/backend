@@ -21,7 +21,7 @@ class PreInfoRequest(PreInfoBase):
 
     model_config = ConfigDict(extra="ignore")
 
-    departure_location: Optional[str] = Field(None, description="출발지 (무시됨)")
+    # departure_location: Optional[str] = Field(None, description="출발지 (무시됨)")
 
 
 class PreInfoUpdate(BaseModel):

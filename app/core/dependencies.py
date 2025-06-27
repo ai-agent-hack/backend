@@ -324,15 +324,8 @@ async def get_current_user_test(
 
     # テスト用ハードコーディングされたユーザー（最初のユーザー）
     try:
-        # Firebase UIDでユーザーを検索（テスト用）
-        from app.repositories.user import UserRepository
-        from app.core.database import get_db
-
-        db = next(get_db())
-        user_repo = UserRepository(db)
-
-        # 最初のactiveユーザーを返す
-        users = user_repo.get_multi(skip=0, limit=1)
+        # 既存のユーザーを取得（user_service를 통해）
+        users = user_service.get_users(skip=0, limit=1, active_only=True)
         if users:
             return users[0]
 
