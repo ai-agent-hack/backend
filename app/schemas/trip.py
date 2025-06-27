@@ -10,6 +10,13 @@ class SaveTripPlanRequest(BaseModel):
     recommend_spots: RecommendSpots
 
 
+class TripSeedResponse(BaseModel):
+    """trip/seed エンドポイントのレスポンス"""
+
+    plan_id: str
+    recommend_spots: RecommendSpots
+
+
 class SaveTripPlanResponse(BaseModel):
     """トリッププラン保存レスポンス"""
 

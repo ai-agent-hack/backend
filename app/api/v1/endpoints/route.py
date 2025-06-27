@@ -6,6 +6,9 @@ from app.core.database import get_db
 from app.schemas.route import (
     RouteCalculationRequest,
     RouteCalculationResponse,
+    RouteDeleteResponse,
+    RoutePartialUpdateResponse,
+    NavigationResponse,
     RouteStatistics,
     RouteFullDetail,
     RouteWithDays,
@@ -59,6 +62,55 @@ async def calculate_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error occurred during route calculation: {str(e)}",
+        )
+
+
+@router.post("/calculate-detailed", response_model=RouteFullDetail)
+async def calculate_route_with_details(
+    request: RouteCalculationRequest,
+    route_service: RouteService = Depends(get_route_service),
+):
+    """
+    Calculate optimal travel route with full details
+
+    Calculate route and return complete route information including:
+    - All route details (days, segments, navigation)
+    - Route summary and daily summaries
+    - Optimization metadata and calculation details
+
+    ⚠️ Returns same schema as GET /route/{plan_id}/{version} for consistency
+    """
+    try:
+        # 1. 경로 계산 실행
+        calculation_result = await route_service.calculate_route(request)
+
+        if not calculation_result.success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=calculation_result.error_message or "Route calculation failed",
+            )
+
+        # 2. 계산 성공 시 완전한 상세 정보 조회
+        route_full_details = await route_service.get_route_full_details(
+            request.plan_id,
+            request.version,
+            calculation_time_seconds=calculation_result.calculation_time_seconds,
+        )
+
+        if not route_full_details:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Route details not found after calculation",
+            )
+
+        return route_full_details
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error occurred during detailed route calculation: {str(e)}",
         )
 
 
@@ -161,7 +213,9 @@ async def regenerate_route_as_new_version(
         )
 
 
-@router.patch("/{plan_id}/{version}/partial-update")
+@router.patch(
+    "/{plan_id}/{version}/partial-update", response_model=RoutePartialUpdateResponse
+)
 async def partial_update_route(
     plan_id: str,
     version: int,
@@ -188,8 +242,22 @@ async def partial_update_route(
                 detail=f"Route not found for modification: plan_id={plan_id}, version={version}",
             )
 
+        # 업데이트 전 상태 기록
+        before_summary = {
+            "total_distance_km": (
+                float(existing_route.total_distance_km)
+                if existing_route.total_distance_km
+                else None
+            ),
+            "total_duration_minutes": existing_route.total_duration_minutes,
+            "hotel_location": existing_route.hotel_location,
+        }
+
         # Supported partial update types
         update_type = update_request.get("type")
+        updated_fields = []
+        affected_days = []
+        recalculation_needed = False
 
         if update_type == "hotel_location":
             # Change hotel location only - maintain existing spot order and recalculate hotel connections only
@@ -197,11 +265,25 @@ async def partial_update_route(
             result = await route_service.update_hotel_location(
                 plan_id, version, new_hotel
             )
+            updated_fields = [
+                "hotel_location",
+                "total_distance_km",
+                "total_duration_minutes",
+            ]
+            recalculation_needed = True
+            affected_days = list(range(1, existing_route.total_days + 1))
 
         elif update_type == "travel_mode":
             # Change travel mode only - maintain existing order and recalculate travel time/distance only
             new_mode = update_request.get("travel_mode")
             result = await route_service.update_travel_mode(plan_id, version, new_mode)
+            updated_fields = [
+                "travel_mode",
+                "total_distance_km",
+                "total_duration_minutes",
+            ]
+            recalculation_needed = True
+            affected_days = list(range(1, existing_route.total_days + 1))
 
         elif update_type == "day_reorder":
             # Change spot order for specific day only
@@ -210,6 +292,13 @@ async def partial_update_route(
             result = await route_service.reorder_day_spots(
                 plan_id, version, day_number, new_spot_order
             )
+            updated_fields = [
+                "ordered_spots",
+                "day_distance_km",
+                "day_duration_minutes",
+            ]
+            recalculation_needed = True
+            affected_days = [day_number]
 
         elif update_type == "spot_replacement":
             # Replace specific spot with another spot
@@ -218,6 +307,10 @@ async def partial_update_route(
             result = await route_service.replace_spot(
                 plan_id, version, old_spot_id, new_spot_id
             )
+            updated_fields = ["spots", "total_distance_km", "total_duration_minutes"]
+            recalculation_needed = True
+            # affected_days는 spot이 속한 날에 따라 결정됨 (임시로 모든 날 설정)
+            affected_days = list(range(1, existing_route.total_days + 1))
 
         else:
             raise HTTPException(
@@ -225,7 +318,31 @@ async def partial_update_route(
                 detail=f"Unsupported update type: {update_type}",
             )
 
-        return result
+        # 업데이트된 route 정보 조회
+        updated_route = route_repository.get_by_plan_and_version(plan_id, version)
+        after_summary = {
+            "total_distance_km": (
+                float(updated_route.total_distance_km)
+                if updated_route.total_distance_km
+                else None
+            ),
+            "total_duration_minutes": updated_route.total_duration_minutes,
+            "hotel_location": updated_route.hotel_location,
+        }
+
+        return RoutePartialUpdateResponse(
+            success=True,
+            update_type=update_type,
+            updated_fields=updated_fields,
+            route_id=existing_route.id,
+            plan_id=plan_id,
+            version=version,
+            before_summary=before_summary,
+            after_summary=after_summary,
+            recalculation_needed=recalculation_needed,
+            affected_days=affected_days,
+            message=f"Successfully updated {update_type} for route {plan_id} v{version}",
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -300,22 +417,25 @@ async def get_route_details(
     Get route details
 
     Retrieve detailed route information for a specific plan version.
-    - Daily route information
+    - Route metadata and summary
+    - Daily route information with ordered spots
     - Segment-wise travel information
-    - Navigation data
-    """
-    route_details = await route_service.get_route_details(plan_id, version)
+    - Daily summaries and optimization details
 
-    if not route_details:
+    ⚠️ Returns same schema as POST /calculate-detailed for consistency
+    """
+    route_full_details = await route_service.get_route_full_details(plan_id, version)
+
+    if not route_full_details:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Route not found: plan_id={plan_id}, version={version}",
         )
 
-    return route_details
+    return route_full_details
 
 
-@router.get("/{plan_id}/{version}/navigation")
+@router.get("/{plan_id}/{version}/navigation", response_model=NavigationResponse)
 async def get_navigation_data(
     plan_id: str,
     version: int,
@@ -338,16 +458,59 @@ async def get_navigation_data(
             detail=f"Route not found: plan_id={plan_id}, version={version}",
         )
 
-    navigation_data = route_details.get("navigation", {})
-
     if format.lower() == "gpx":
         # Convert to GPX format (future implementation)
-        return {"message": "GPX format is not yet supported."}
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="GPX format is not yet supported.",
+        )
 
-    return navigation_data
+    # NavigationResponse 형태로 변환
+    daily_navigation = []
+    for route_day in route_details.get("route_days", []):
+        day_nav = {
+            "day_number": route_day["day_number"],
+            "start_location": route_day["start_location"],
+            "end_location": route_day["end_location"],
+            "day_distance_km": route_day["day_distance_km"],
+            "day_duration_minutes": route_day["day_duration_minutes"],
+            "ordered_spots": route_day["ordered_spots"],
+            "route_geometry": route_day["route_geometry"],
+            "segments": [
+                {
+                    "segment_order": seg["segment_order"],
+                    "from_location": seg["from_location"],
+                    "to_spot_name": seg["to_spot_name"],
+                    "distance_meters": seg["distance_meters"],
+                    "duration_seconds": seg["duration_seconds"],
+                    "travel_mode": seg["travel_mode"],
+                    "directions_steps": seg.get("directions_steps"),
+                }
+                for seg in route_day.get("route_segments", [])
+            ],
+        }
+        daily_navigation.append(day_nav)
+
+    route_overview = {
+        "departure_location": route_details["departure_location"],
+        "hotel_location": route_details["hotel_location"],
+        "total_spots_count": route_details["total_spots_count"],
+        "google_maps_data": route_details.get("google_maps_data"),
+    }
+
+    return NavigationResponse(
+        route_id=route_details["id"],
+        plan_id=route_details["plan_id"],
+        version=route_details["version"],
+        total_distance_km=route_details["total_distance_km"] or 0,
+        total_duration_minutes=route_details["total_duration_minutes"] or 0,
+        total_days=route_details["total_days"],
+        daily_navigation=daily_navigation,
+        route_overview=route_overview,
+    )
 
 
-@router.delete("/{plan_id}/{version}")
+@router.delete("/{plan_id}/{version}", response_model=RouteDeleteResponse)
 async def delete_route(
     plan_id: str,
     version: int,
@@ -360,15 +523,53 @@ async def delete_route(
     """
     try:
         route_repository = RouteRepository(next(get_db()))
-        deleted = route_repository.delete_by_plan_and_version(plan_id, version)
 
-        if not deleted:
+        # 삭제 전 정보 조회
+        route_to_delete = route_repository.get_by_plan_and_version(plan_id, version)
+        if not route_to_delete:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Route not found for deletion: plan_id={plan_id}, version={version}",
             )
 
-        return {"message": f"Route successfully deleted: {plan_id} v{version}"}
+        deleted_summary = {
+            "route_id": route_to_delete.id,
+            "total_distance_km": (
+                float(route_to_delete.total_distance_km)
+                if route_to_delete.total_distance_km
+                else None
+            ),
+            "total_duration_minutes": route_to_delete.total_duration_minutes,
+            "total_days": route_to_delete.total_days,
+            "calculated_at": (
+                route_to_delete.calculated_at.isoformat()
+                if route_to_delete.calculated_at
+                else None
+            ),
+        }
+
+        # 삭제 실행
+        deleted = route_repository.delete_by_plan_and_version(plan_id, version)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Route deletion failed: plan_id={plan_id}, version={version}",
+            )
+
+        # 남은 버전들 조회
+        remaining_routes = route_repository.get_all_by_plan(plan_id)
+        remaining_versions = [route.version for route in remaining_routes]
+
+        return RouteDeleteResponse(
+            success=True,
+            deleted_route_id=route_to_delete.id,
+            plan_id=plan_id,
+            version=version,
+            deleted_summary=deleted_summary,
+            remaining_versions=remaining_versions,
+            message=f"Route successfully deleted: {plan_id} v{version}",
+        )
     except HTTPException:
         raise
     except Exception as e:

@@ -18,6 +18,7 @@ from app.schemas.trip import (
     SaveTripPlanResponse,
     TripPlanInfo,
     TripPlanResponse,
+    TripSeedResponse,
 )
 from app.services.pre_info import PreInfoService
 from app.services.recommendation_service import RecommendationService
@@ -107,7 +108,7 @@ def _generate_sample_spots() -> RecommendSpots:
 
 
 @router.post(
-    "/seed", response_model=RecommendSpots, status_code=status.HTTP_201_CREATED
+    "/seed", response_model=TripSeedResponse, status_code=status.HTTP_201_CREATED
 )
 async def create_trip_seed_from_pre_info(
     input_data: RecommendSpotFromPreInfoRequest,
@@ -115,7 +116,7 @@ async def create_trip_seed_from_pre_info(
     recommendation_service: RecommendationService = Depends(get_recommendation_service),
     rec_plan_service: RecPlanService = Depends(get_rec_plan_service),
     rec_spot_service: RecSpotService = Depends(get_rec_spot_service),
-) -> RecommendSpots:
+) -> TripSeedResponse:
     """
     pre_infoからトリップのシードとなるスポット推薦を生成するエンドポイント
     ※開発中のため認証不要
@@ -203,8 +204,8 @@ async def create_trip_seed_from_pre_info(
         for i, spot in enumerate(actual_spots[:3]):  # 최초 3건만 로그 출력
             print(f"  Spot {i+1}: {spot}")
 
-        # 추천 결과 반환
-        return recommend_spots
+        # 추천 결과와 plan_id를 함께 반환
+        return TripSeedResponse(plan_id=plan_id, recommend_spots=recommend_spots)
 
     except ValueError:
         raise HTTPException(

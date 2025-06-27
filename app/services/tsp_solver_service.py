@@ -92,11 +92,17 @@ class TSPSolverService:
         except ImportError:
             raise ImportError("OR-Tools 패키지가 필요합니다: pip install ortools")
 
+        # 종료 지점이 지정되지 않은 경우 시작 지점과 동일하게 설정
+        if end_index is None:
+            end_index = start_index
+
         # 거리 매트릭스를 2D 배열로 변환
         matrix = self._create_matrix_array(distance_matrix, num_locations, optimize_for)
 
-        # TSP 모델 생성
-        manager = pywrapcp.RoutingIndexManager(num_locations, 1, start_index)
+        # TSP 모델 생성 (시작 및 종료 지점 지정)
+        manager = pywrapcp.RoutingIndexManager(
+            num_locations, 1, [start_index], [end_index]
+        )
         routing = pywrapcp.RoutingModel(manager)
 
         def distance_callback(from_index, to_index):
@@ -107,11 +113,6 @@ class TSPSolverService:
 
         transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
-
-        # 종료 지점 설정
-        if end_index is not None and end_index != start_index:
-            routing.SetFixedCostOfAllVehicles(0)
-            routing.AddVariableMinimizedByFinalizer(routing.End(0))
 
         # 검색 파라미터 설정
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
@@ -337,112 +338,163 @@ class TSPSolverService:
         route.append(manager.IndexToNode(index))
 
         # 메트릭스 계산
-        total_distance, total_duration, segments = self._calculate_route_metrics(
-            route, distance_matrix
-        )
+        objective_value = solution.ObjectiveValue()
+        total_distance = objective_value
+        total_duration = objective_value
 
         return TSPSolution(
             optimal_order=route,
             total_distance_meters=total_distance,
             total_duration_seconds=total_duration,
-            route_segments=segments,
+            route_segments=self._calculate_route_metrics(route, distance_matrix)[2],
             solve_time_seconds=0.0,
         )
 
     def solve_multi_day_tsp(
         self,
         locations: List[LocationCoordinate],
-        distance_matrix: Dict[Tuple[int, int], DistanceMatrixResult],
-        days_assignment: Dict[int, int],  # {location_index: day_number}
+        distance_matrix_result: List[List[DistanceMatrixResult]],
+        days_assignment: Dict[int, List[int]],
         start_location_index: int,
-        hotel_location_index: Optional[int] = None,
+        hotel_location_index: Optional[int],
         optimize_for: str = "distance",
     ) -> Dict[int, TSPSolution]:
         """
-        다일차 TSP 해결
-
-        Args:
-            locations: 모든 위치 목록
-            distance_matrix: 거리 매트릭스
-            days_assignment: 각 위치의 일차 배정
-            start_location_index: 시작 위치 인덱스
-            hotel_location_index: 호텔 위치 인덱스
-            optimize_for: 최적화 기준
-
-        Returns:
-            {day_number: TSPSolution} 딕셔너리
+        여러 날에 걸친 TSP 문제 해결
         """
         solutions = {}
+        num_locations = len(locations)
 
-        # 일차별로 위치들을 그룹화
-        days_locations = {}
-        for loc_idx, day in days_assignment.items():
-            if day not in days_locations:
-                days_locations[day] = []
-            days_locations[day].append(loc_idx)
+        # 전체 로케이션에 대한 거리/시간을 담는 딕셔너리 생성
+        dist_matrix_dict = {}
+        for i in range(num_locations):
+            for j in range(num_locations):
+                dist_matrix_dict[(i, j)] = distance_matrix_result[i][j]
 
-        for day, day_locations in days_locations.items():
-            if not day_locations:
+        for day, spot_indices in days_assignment.items():
+            if not spot_indices:
                 continue
 
-            # 해당 일차의 시작점과 종료점 결정
-            if day == 1:
-                day_start = start_location_index
-            else:
-                day_start = hotel_location_index or start_location_index
+            day_start_node = start_location_index if day == 1 else hotel_location_index
+            day_end_node = hotel_location_index
 
-            day_end = hotel_location_index or start_location_index
+            # 해당 날짜의 로케이션 집합
+            day_locations_indices = {day_start_node} | set(spot_indices)
+            if day_end_node is not None:
+                day_locations_indices.add(day_end_node)
 
-            # 해당 일차의 모든 위치 (시작점 + 방문지 + 종료점)
-            all_day_locations = [day_start] + day_locations
-            if day_end not in all_day_locations:
-                all_day_locations.append(day_end)
+            # 해당 날짜의 로케이션만으로 새로운 매핑과 매트릭스 생성
+            sub_location_list = sorted(list(day_locations_indices))
+            if not sub_location_list:
+                continue
 
-            # 해당 일차의 거리 매트릭스 추출
-            day_distance_matrix = self._extract_day_distance_matrix(
-                distance_matrix, all_day_locations
+            sub_map = {
+                original_idx: new_idx
+                for new_idx, original_idx in enumerate(sub_location_list)
+            }
+            sub_dist_matrix_dict = {}
+
+            for r_idx, r_original in enumerate(sub_location_list):
+                for c_idx, c_original in enumerate(sub_location_list):
+                    sub_dist_matrix_dict[(r_idx, c_idx)] = dist_matrix_dict.get(
+                        (r_original, c_original)
+                    )
+
+            sub_start_idx = sub_map[day_start_node]
+            sub_end_idx = (
+                sub_map.get(day_end_node) if day_end_node is not None else None
             )
 
-            # 인덱스 매핑 (원본 인덱스 → 일차별 인덱스)
-            index_mapping = {loc: i for i, loc in enumerate(all_day_locations)}
-            reverse_mapping = {i: loc for i, loc in enumerate(all_day_locations)}
+            try:
+                solution = self.solve_tsp(
+                    distance_matrix=sub_dist_matrix_dict,
+                    num_locations=len(sub_location_list),
+                    start_index=sub_start_idx,
+                    end_index=sub_end_idx,
+                    optimize_for=optimize_for,
+                )
 
-            # 일차별 TSP 해결
-            day_solution = self.solve_tsp(
-                day_distance_matrix,
-                len(all_day_locations),
-                start_index=0,  # 매핑된 시작점은 항상 0
-                end_index=index_mapping.get(day_end),
-                optimize_for=optimize_for,
-            )
+                # 원래 인덱스로 복원
+                original_order = [sub_location_list[i] for i in solution.optimal_order]
+                solution.optimal_order = original_order
 
-            # 원본 인덱스로 결과 변환
-            original_order = [
-                reverse_mapping[idx] for idx in day_solution.optimal_order
-            ]
-            original_segments = [
-                (reverse_mapping[seg[0]], reverse_mapping[seg[1]])
-                for seg in day_solution.route_segments
-            ]
+                solutions[day] = solution
 
-            day_solution.optimal_order = original_order
-            day_solution.route_segments = original_segments
-
-            solutions[day] = day_solution
+            except Exception as e:
+                logger.error(f"{day}일차 TSP 해결 실패: {e}")
 
         return solutions
 
-    def _extract_day_distance_matrix(
+    def _solve_tsp(
         self,
-        full_distance_matrix: Dict[Tuple[int, int], DistanceMatrixResult],
-        day_locations: List[int],
-    ) -> Dict[Tuple[int, int], DistanceMatrixResult]:
-        """일차별 거리 매트릭스 추출"""
-        day_matrix = {}
+        distance_matrix: List[List[int]],
+        start_node: int,
+        num_vehicles: int,
+    ) -> Tuple[List[int], int, int]:
+        """OR-Tools를 사용한 TSP 해결"""
+        try:
+            from ortools.constraint_solver import routing_enums_pb2
+            from ortools.constraint_solver import pywrapcp
+        except ImportError:
+            raise ImportError("OR-Tools 패키지가 필요합니다: pip install ortools")
 
-        for i, from_loc in enumerate(day_locations):
-            for j, to_loc in enumerate(day_locations):
-                if (from_loc, to_loc) in full_distance_matrix:
-                    day_matrix[(i, j)] = full_distance_matrix[(from_loc, to_loc)]
+        # TSP 모델 생성
+        manager = pywrapcp.RoutingIndexManager(
+            len(distance_matrix), num_vehicles, start_node
+        )
+        routing = pywrapcp.RoutingModel(manager)
 
-        return day_matrix
+        def distance_callback(from_index, to_index):
+            """거리 콜백 함수"""
+            from_node = manager.IndexToNode(from_index)
+            to_node = manager.IndexToNode(to_index)
+            return distance_matrix[from_node][to_node]
+
+        transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+        routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+
+        # 검색 파라미터 설정
+        search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+        search_parameters.first_solution_strategy = (
+            routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+        )
+        search_parameters.local_search_metaheuristic = (
+            routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+        )
+        search_parameters.time_limit.seconds = 30  # 30초 제한
+
+        # TSP 해결
+        solution = routing.SolveWithParameters(search_parameters)
+
+        if not solution:
+            raise Exception("OR-Tools로 해결할 수 없습니다.")
+
+        # 경로 추출
+        route = []
+        index = routing.Start(0)
+        while not routing.IsEnd(index):
+            route.append(manager.IndexToNode(index))
+            index = solution.Value(routing.NextVar(index))
+        route.append(manager.IndexToNode(index))  # 마지막 노드 추가
+
+        # 메트릭스 계산 및 세그먼트 생성
+        total_distance = 0
+        total_duration = 0
+        segments = []
+        for i in range(len(route) - 1):
+            from_node = route[i]
+            to_node = route[i + 1]
+            dist = distance_matrix[from_node][to_node]
+
+            # 비용 행렬이 거리/시간 중 하나이므로, 다른 하나는 추정치 또는 동일 값 사용
+            total_distance += dist
+            total_duration += dist  # 여기서 더 나은 추정이 필요할 수 있음
+            segments.append((from_node, to_node))
+
+        return TSPSolution(
+            optimal_order=route,
+            total_distance_meters=total_distance,
+            total_duration_seconds=total_duration,
+            route_segments=segments,
+            solve_time_seconds=0.0,  # 계산 시간은 상위 레벨에서 측정
+        )

@@ -160,9 +160,18 @@ class RouteDayWithSegments(RouteDay):
 
 
 class RouteFullDetail(Route):
-    """すべてのサブデータを含むRouteスキーマ"""
+    """すべてのサブデータを含む완전한 Route 상세 정보 스키마"""
 
     route_days: List[RouteDayWithSegments] = []
+
+    # 추가 상세 정보
+    route_summary: Optional[Dict[str, Any]] = None
+    daily_summary: Optional[List[Dict[str, Any]]] = None
+    optimization_details: Optional[Dict[str, Any]] = None
+
+    # 계산 메타데이터 (선택사항)
+    calculation_time_seconds: Optional[float] = None
+    created_by_calculation: Optional[bool] = None  # 계산으로 생성되었는지 여부
 
 
 # === Request/Response Schemas ===
@@ -189,6 +198,24 @@ class RouteCalculationResponse(BaseModel):
     total_spots_count: Optional[int] = None
     calculation_time_seconds: Optional[float] = None
     error_message: Optional[str] = None
+
+
+class RouteDeleteResponse(BaseModel):
+    """Route削除レスポンススキーマ"""
+
+    success: bool
+    message: str
+    deleted_route_id: Optional[int] = None
+    deleted_count: int = 0  # 삭제된 레코드 수
+
+
+class RoutePartialUpdateResponse(BaseModel):
+    """Route部分更新レスポンススキーマ"""
+
+    success: bool
+    message: str
+    updated_route_id: Optional[int] = None
+    updated_fields: List[str] = []
 
 
 class RouteStatistics(BaseModel):
@@ -224,3 +251,13 @@ class RouteNavigation(BaseModel):
     total_distance_km: float
     total_duration_minutes: int
     days: List[Dict[str, Any]]
+
+
+class NavigationResponse(BaseModel):
+    """ナビゲーション応答スキーマ"""
+
+    success: bool
+    route_navigation: Optional[RouteNavigation] = None
+    format: str = "json"
+    content: Optional[str] = None  # GPX format用
+    error_message: Optional[str] = None

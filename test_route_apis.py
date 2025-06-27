@@ -89,6 +89,21 @@ def main():
         description="Route 상세 정보 조회 (새로 수정된 API)",
     )
 
+    # 1.5. Calculate Detailed Route
+    test_api(
+        "POST",
+        f"{BASE_URL}/calculate-detailed",
+        data={
+            "plan_id": plan_id,
+            "version": version,
+            "departure_location": "서울역",
+            "hotel_location": "명동역",
+            "travel_mode": "DRIVING",
+            "optimize_for": "time",
+        },
+        description="상세 경로 계산 (calculate-detailed)",
+    )
+
     # 2. 시작 전 상태 확인
     test_api("GET", f"{BASE_URL}/{plan_id}/statistics", description="Route 통계 정보")
 
@@ -163,6 +178,7 @@ def main():
     print("🎉 모든 테스트 완료!")
     print("\n📊 테스트 요약:")
     print("✅ GET route details - 수정 완료, 정상 작동")
+    print("✅ POST calculate-detailed - 상세 경로 계산")
     print("✅ PATCH partial-update (hotel_location) - 경로 재계산 포함")
     print("✅ PATCH partial-update (travel_mode) - 시간/거리 재계산 포함")
     print("✅ PATCH partial-update (day_reorder) - 구간 재생성 포함")

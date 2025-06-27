@@ -70,6 +70,26 @@ class TripRefineService:
         # Merge selected spots with new recommendations
         merged_spots = self._merge_selected_and_new_spots(selected_spots, new_spots)
 
+        # Debug logging for selected spots preservation
+        print(f"🔍 Refine Debug Info:")
+        print(f"  - Original selected spots: {len(selected_spots)}")
+        for spot_data in selected_spots:
+            print(
+                f"    • {spot_data['spot'].spot_id} in {spot_data['time_slot']} (selected: {spot_data['spot'].selected})"
+            )
+
+        # Count final selected spots
+        final_selected_count = 0
+        for time_slot in merged_spots:
+            for spot in time_slot.spots:
+                if spot.selected:
+                    final_selected_count += 1
+                    print(
+                        f"    ✓ {spot.spot_id} in {time_slot.time_slot} (selected: {spot.selected})"
+                    )
+
+        print(f"  - Final selected spots preserved: {final_selected_count}")
+
         new_recommendations = RecommendSpots(
             recommend_spot_id=recommend_spot_id, recommend_spots=merged_spots
         )
@@ -262,39 +282,72 @@ class TripRefineService:
         """
         from app.schemas.spot import TimeSlot, Spot, TimeSlotSpots
 
-        # Group selected spots by time slot
+        # Group selected spots by time slot and create a set of selected spot IDs
         selected_by_timeslot = {}
+        selected_spot_ids = set()
+
         for selected in selected_spots:
             time_slot = selected["time_slot"]
+            spot = selected["spot"]
+
             if time_slot not in selected_by_timeslot:
                 selected_by_timeslot[time_slot] = []
-            selected_by_timeslot[time_slot].append(selected["spot"])
+
+            # Ensure the selected spot has selected=True preserved
+            spot.selected = True
+            selected_by_timeslot[time_slot].append(spot)
+            selected_spot_ids.add(spot.spot_id)
 
         # Create merged result with all time slots
         merged_time_slots = []
 
-        # Process each time slot from new recommendations
+        # Get all time slots from both selected spots and new recommendations
+        all_time_slots = set()
+        all_time_slots.update(selected_by_timeslot.keys())
         for new_time_slot in new_spots:
-            time_slot_name = new_time_slot["time_slot"]
+            all_time_slots.add(new_time_slot["time_slot"])
 
-            # Start with selected spots for this time slot
-            merged_spots = selected_by_timeslot.get(time_slot_name, [])
+        # Process each time slot
+        for time_slot_name in all_time_slots:
+            # Start with selected spots for this time slot (already have selected=True)
+            merged_spots = selected_by_timeslot.get(time_slot_name, []).copy()
 
-            # Add new spots to fill remaining slots (no hard limit, dynamic allocation)
-            new_spots_in_slot = new_time_slot["spots"]
+            # Find corresponding new time slot data
+            new_time_slot_data = None
+            for new_time_slot in new_spots:
+                if new_time_slot["time_slot"] == time_slot_name:
+                    new_time_slot_data = new_time_slot
+                    break
 
-            # Add all new spots (no artificial limit like the original service)
-            for new_spot in new_spots_in_slot:
-                # Convert dict to Spot object if needed
-                if isinstance(new_spot, dict):
-                    merged_spots.append(Spot(**new_spot))
-                else:
-                    merged_spots.append(new_spot)
+            # Add new spots that are not already selected
+            if new_time_slot_data:
+                new_spots_in_slot = new_time_slot_data["spots"]
 
-            # Create TimeSlotSpots object correctly
-            merged_time_slot = TimeSlotSpots(
-                time_slot=TimeSlot(time_slot_name), spots=merged_spots
-            )
-            merged_time_slots.append(merged_time_slot)
+                for new_spot in new_spots_in_slot:
+                    # Check if this spot was in the original selected list
+                    spot_id = (
+                        new_spot.get("spot_id")
+                        if isinstance(new_spot, dict)
+                        else new_spot.spot_id
+                    )
+
+                    # Only add if this spot was not already selected
+                    if spot_id not in selected_spot_ids:
+                        # Convert dict to Spot object if needed
+                        if isinstance(new_spot, dict):
+                            # Ensure selected is False for new spots
+                            new_spot["selected"] = False
+                            merged_spots.append(Spot(**new_spot))
+                        else:
+                            # For Spot objects, ensure selected is False
+                            new_spot.selected = False
+                            merged_spots.append(new_spot)
+
+            # Create TimeSlotSpots object correctly (only if there are spots)
+            if merged_spots:
+                merged_time_slot = TimeSlotSpots(
+                    time_slot=TimeSlot(time_slot_name), spots=merged_spots
+                )
+                merged_time_slots.append(merged_time_slot)
 
         return merged_time_slots
