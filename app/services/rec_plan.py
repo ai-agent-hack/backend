@@ -95,7 +95,6 @@ class RecPlanService:
                 "plan_id": latest_plan.plan_id,
                 "current_version": latest_plan.version,
                 "created_at": latest_plan.created_at,
-                "departure_location": pre_info.departure_location,
                 "start_date": pre_info.start_date,
                 "end_date": pre_info.end_date,
                 "atmosphere": pre_info.atmosphere,

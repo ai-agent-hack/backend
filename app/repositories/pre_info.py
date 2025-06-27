@@ -31,7 +31,9 @@ class PreInfoRepository(BaseRepository[PreInfo, PreInfoRequest, PreInfoUpdate]):
 
     def create_with_user(self, obj_in: PreInfoRequest, user_id: int) -> PreInfo:
         """ユーザーIDと共に旅行事前情報を作成"""
-        obj_data = obj_in.model_dump()
+        obj_data = obj_in.model_dump(
+            exclude={"departure_location"}
+        )  # departure_location 제외
         obj_data["user_id"] = user_id
         db_obj = self.model(**obj_data)
         self.db.add(db_obj)

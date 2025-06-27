@@ -134,7 +134,6 @@ class LLMService:
 以下の旅行情報を分析して、スポット検索に使用するキーワードと推薦重みを生成してください。
 
 **旅行情報:**
-- 出発地: {pre_info.departure_location}
 - 地域: {pre_info.region}  
 - 旅行期間: {pre_info.start_date.strftime('%Y-%m-%d')} ~ {pre_info.end_date.strftime('%Y-%m-%d')}
 - 予算: {pre_info.budget:,}円

@@ -18,7 +18,6 @@ class PreInfo(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
-    departure_location: Mapped[str] = mapped_column(String(200), nullable=False)
     start_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     atmosphere: Mapped[str] = mapped_column(Text, nullable=False)
@@ -47,4 +46,6 @@ class PreInfo(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<PreInfo(id={self.id}, user_id={self.user_id}, region='{self.region}', departure='{self.departure_location}')>"
+        return (
+            f"<PreInfo(id={self.id}, user_id={self.user_id}, region='{self.region}')>"
+        )

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from typing import Optional
 
@@ -6,7 +6,6 @@ from typing import Optional
 class PreInfoBase(BaseModel):
     """旅行事前情報の共通フィールド"""
 
-    departure_location: str = Field(..., description="出発地")
     start_date: datetime = Field(..., description="旅行開始日")
     end_date: datetime = Field(..., description="旅行終了日")
     atmosphere: str = Field(..., description="旅行の雰囲気（自由記述）")
@@ -20,13 +19,14 @@ class PreInfoBase(BaseModel):
 class PreInfoRequest(PreInfoBase):
     """旅行事前情報登録リクエスト"""
 
-    pass
+    model_config = ConfigDict(extra="ignore")
+
+    departure_location: Optional[str] = Field(None, description="출발지 (무시됨)")
 
 
 class PreInfoUpdate(BaseModel):
     """旅行事前情報修正リクエスト"""
 
-    departure_location: Optional[str] = Field(None, description="出発地")
     start_date: Optional[datetime] = Field(None, description="旅行開始日")
     end_date: Optional[datetime] = Field(None, description="旅行終了日")
     atmosphere: Optional[str] = Field(None, description="旅行の雰囲気")
