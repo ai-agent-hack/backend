@@ -1,4 +1,4 @@
-version: "3.8"
+version: "3.9"
 
 services:
     # FastAPIアプリケーション
@@ -22,7 +22,8 @@ services:
             # Google Maps APIキー
             - GOOGLE_MAP_API_KEY=${GOOGLE_MAP_API_KEY}
         depends_on:
-            - postgres
+            postgres:
+                condition: service_healthy
             # - redis  # Redis使用時にコメントを解除
         volumes:
             - ./app:/app/app
@@ -31,6 +32,7 @@ services:
         command: ["/app/run_migrations.sh"]
         networks:
             - fastapi-network
+        restart: unless-stopped
 
     # PostgreSQLデータベース
     postgres:
@@ -46,6 +48,13 @@ services:
             - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
         networks:
             - fastapi-network
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres -d fastapi_db"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+        restart: unless-stopped
 
     # キャッシュ用Redis（コメントアウト - 必要時にコメントを解除）
     # redis:
