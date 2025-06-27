@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
+from sqlalchemy.sql import func
 
 from app.models.base import Base
 
@@ -26,8 +27,8 @@ class Route(Base):
     __tablename__ = "routes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    plan_id: Mapped[str] = mapped_column(String(50), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    plan_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # 여행 기본 정보
     total_days: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -46,7 +47,7 @@ class Route(Base):
     total_spots_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # 메타데이터
-    calculated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    calculated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     google_maps_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSONB, nullable=True
     )

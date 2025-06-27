@@ -52,7 +52,7 @@ class GoogleMapsService:
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or settings.GOOGLE_MAPS_API_KEY
+        self.api_key = api_key or settings.GOOGLE_MAP_API_KEY
         self.base_url = "https://maps.googleapis.com/maps/api"
 
         if not self.api_key:

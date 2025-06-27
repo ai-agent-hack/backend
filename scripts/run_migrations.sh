@@ -7,11 +7,11 @@ if [ -n "$CLOUD_SQL_CONNECTION_NAME" ] && [ "$ENVIRONMENT" = "production" ]; the
 else
     echo "Development environment detected. Waiting for PostgreSQL TCP connection..."
     # Wait for PostgreSQL to be ready (for local development)
-    while ! pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER; do
-        echo "PostgreSQL is not ready yet. Waiting..."
-        sleep 2
-    done
-    echo "PostgreSQL is ready!"
+while ! pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER; do
+    echo "PostgreSQL is not ready yet. Waiting..."
+    sleep 2
+done
+echo "PostgreSQL is ready!"
 fi
 
 # Run Alembic migrations

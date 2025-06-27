@@ -39,12 +39,16 @@ class RouteRepository(BaseRepository[Route, RouteCreate, RouteUpdate]):
         self, plan_id: str, version: int, include_segments: bool = True
     ) -> Optional[Route]:
         """경로와 하위 데이터를 모두 포함하여 조회"""
-        query = self.db.query(Route).options(joinedload(Route.route_days))
+        query = self.db.query(Route)
 
         if include_segments:
+            # segment를 로드할 때 day도 함께 로드되도록 joinedload를 중첩합니다.
             query = query.options(
                 joinedload(Route.route_days).joinedload(RouteDay.route_segments)
             )
+        else:
+            # day만 로드합니다.
+            query = query.options(joinedload(Route.route_days))
 
         return query.filter(
             and_(Route.plan_id == plan_id, Route.version == version)
@@ -111,7 +115,7 @@ class RouteRepository(BaseRepository[Route, RouteCreate, RouteUpdate]):
         route = self.get_by_plan_and_version(plan_id, version)
         if route:
             self.db.delete(route)
-            self.db.commit()
+            self.db.flush()  # 변경 사항을 세션에 즉시 반영
             return True
         return False
 

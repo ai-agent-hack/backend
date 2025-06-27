@@ -24,6 +24,11 @@ from app.schemas.route import (
     RouteSegmentCreate,
 )
 from app.models.rec_spot import RecSpot
+from app.services.route_calculator import (
+    RouteCalculator,
+    RouteCalculationInput,
+    RouteCalculationOutput,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -57,132 +62,74 @@ class RouteService:
         self, request: RouteCalculationRequest
     ) -> RouteCalculationResponse:
         """
-        全体ルート計算メインメソッド。
-        上記で説明した7段階プロセスを実行します。
+        경로 계산 메인 로직.
+        RouteCalculator를 사용하여 계산을 위임하고, 결과를 저장합니다.
         """
         start_time = time.time()
 
         try:
-            logger.info(
-                f"ルート計算開始: plan_id={request.plan_id}, version={request.version}"
+            # 기존 경로 데이터가 있다면 삭제
+            existing_route = self.route_repository.get_by_plan_and_version(
+                request.plan_id, request.version
             )
+            if existing_route:
+                self.route_repository.delete_by_plan_and_version(
+                    request.plan_id, request.version
+                )
 
-            # 1️⃣ スポットデータ収集
+            # 1. 계산에 필요한 입력 데이터 준비
             spots_data = await self._collect_spots_data(
                 request.plan_id, request.version
             )
             if not spots_data["selected_spots"]:
-                return RouteCalculationResponse(
-                    success=False, error_message="選択されたスポットがありません。"
-                )
+                raise ValueError("선택된 스팟이 없습니다.")
 
-            # departure_locationがない場合、PreInfoから自動抽出
-            departure_location = request.departure_location
-            if not departure_location and spots_data.get("pre_info"):
-                departure_location = spots_data["pre_info"].departure_location
-                logger.info(f"PreInfoから出発地を自動抽出: {departure_location}")
-
-            if not departure_location:
-                return RouteCalculationResponse(
-                    success=False, error_message="出発地情報がありません。"
-                )
-
-            # 2️⃣ 座標変換
             locations, location_mapping = self._create_location_coordinates(
-                spots_data, departure_location, request.hotel_location
+                spots_data, request.departure_location, request.hotel_location
             )
 
-            # 3️⃣ 距離マトリクス計算
-            distance_matrix = await self.google_maps_service.batch_distance_calculation(
-                locations, request.travel_mode
-            )
-
-            # 4️⃣ 日別グループ化
-            days_assignment = self._assign_spots_to_days(spots_data["selected_spots"])
-
-            # 5️⃣ TSP解決
-            tsp_solutions = self.tsp_solver_service.solve_multi_day_tsp(
+            calculation_input = RouteCalculationInput(
+                plan_id=request.plan_id,
+                version=request.version,
+                selected_spots=spots_data["selected_spots"],
+                total_days=spots_data["total_days"],
                 locations=locations,
-                distance_matrix=distance_matrix,
-                days_assignment=days_assignment,
-                start_location_index=location_mapping["departure"],
-                hotel_location_index=location_mapping.get("hotel"),
+                location_mapping=location_mapping,
+                travel_mode=request.travel_mode,
                 optimize_for=request.optimize_for,
+                google_maps_service=self.google_maps_service,
+                tsp_solver_service=self.tsp_solver_service,
             )
 
-            # 6️⃣ 詳細ルート生成
+            # 2. RouteCalculator 실행
+            calculator = RouteCalculator(calculation_input)
+            calculation_output = await calculator.run()
+
+            # 3. 상세 경로 정보 생성 (Google Maps API 호출)
             detailed_routes = await self._generate_detailed_routes(
-                tsp_solutions, locations, request.travel_mode
+                calculation_output.tsp_solutions, locations, request.travel_mode
             )
 
-            # 7️⃣ データベース保存
+            # 4. 데이터베이스에 결과 저장
             route = await self._save_route_data(
-                request, spots_data, tsp_solutions, detailed_routes, locations
+                request,
+                spots_data,
+                calculation_output,
+                detailed_routes,
+                locations,
             )
 
             calculation_time = time.time() - start_time
-            logger.info(
-                f"ルート計算完了: route_id={route.id}, 所要時間={calculation_time:.2f}s"
-            )
-
-            # 추가 상세 정보 생성
-            route_summary = {
-                "route_id": route.id,
-                "plan_id": route.plan_id,
-                "version": route.version,
-                "total_days": route.total_days,
-                "departure_location": route.departure_location,
-                "hotel_location": route.hotel_location,
-                "calculated_at": (
-                    route.calculated_at.isoformat() if route.calculated_at else None
-                ),
-            }
-
-            daily_summary = []
-            for day, solution in tsp_solutions.items():
-                day_info = {
-                    "day_number": day,
-                    "spots_count": len(
-                        [idx for idx in solution.optimal_order if idx >= 2]
-                    ),  # exclude departure/hotel
-                    "distance_km": round(solution.total_distance_meters / 1000, 2),
-                    "duration_minutes": solution.total_duration_seconds // 60,
-                    "optimization_time_seconds": solution.solve_time_seconds,
-                }
-                daily_summary.append(day_info)
-
-            optimization_details = {
-                "travel_mode": request.travel_mode,
-                "optimize_for": request.optimize_for,
-                "total_locations_processed": len(locations),
-                "tsp_solutions_count": len(tsp_solutions),
-                "google_maps_api_calls": len(tsp_solutions)
-                * 2,  # distance matrix + directions per day
-            }
-
             return RouteCalculationResponse(
                 success=True,
-                route_id=route.id,
-                total_distance_km=(
-                    float(route.total_distance_km) if route.total_distance_km else None
-                ),
-                total_duration_minutes=route.total_duration_minutes,
-                total_spots_count=route.total_spots_count,
+                plan_id=route.plan_id,
+                version=route.version,
                 calculation_time_seconds=calculation_time,
-                route_summary=route_summary,
-                daily_summary=daily_summary,
-                optimization_details=optimization_details,
             )
 
         except Exception as e:
-            calculation_time = time.time() - start_time
-            logger.error(f"ルート計算失敗: {e}", exc_info=True)
-
-            return RouteCalculationResponse(
-                success=False,
-                error_message=str(e),
-                calculation_time_seconds=calculation_time,
-            )
+            logger.error(f"경로 계산 중 에러 발생: {e}", exc_info=True)
+            return RouteCalculationResponse(success=False, error_message=str(e))
 
     async def _collect_spots_data(self, plan_id: str, version: int) -> Dict[str, Any]:
         """1️⃣ スポットデータ収集"""
@@ -244,35 +191,42 @@ class RouteService:
 
         return locations, location_mapping
 
-    def _assign_spots_to_days(self, selected_spots: List[RecSpot]) -> Dict[int, int]:
-        """4️⃣ 일차별 그룹화 - 시간대를 일차로 변환"""
-        days_assignment = {}
+    def _assign_spots_to_days(
+        self, selected_spots: List[RecSpot], total_days: int
+    ) -> Dict[int, List[int]]:
+        """
+        4️⃣ 일차별 그룹화 - total_days에 맞춰 스팟을 균등 분배
+        """
+        total_spots = len(selected_spots)
+        if total_spots == 0 or total_days == 0:
+            return {}
 
-        # 간단한 전략: 시간대별로 하루씩 배정
-        # 실제로는 더 복잡한 로직 필요 (스팟 수, 지역별 클러스터링 등)
+        # 스팟의 위치 인덱스(locations 리스트 기준)를 매핑. 스팟은 1부터 시작.
+        spot_location_index_map = {
+            spot.id: i + 1 for i, spot in enumerate(selected_spots)
+        }
 
-        spot_index = 1  # 0은 출발지
-        current_day = 1
-        spots_per_day = 8  # 하루 최대 스팟 수
+        # 시간대 순서로 스팟 정렬
+        time_slot_map = {"MORNING": 0, "AFTERNOON": 1, "NIGHT": 2}
+        sorted_spots = sorted(
+            selected_spots, key=lambda s: time_slot_map.get(s.time_slot, 99)
+        )
 
-        # 시간대 순서대로 배정
-        time_slot_order = ["MORNING", "AFTERNOON", "NIGHT"]
+        # 정렬된 순서에 따라 위치 인덱스 리스트 생성
+        sorted_location_indices = [
+            spot_location_index_map[spot.id] for spot in sorted_spots
+        ]
 
-        for time_slot in time_slot_order:
-            slot_spots = [s for s in selected_spots if s.time_slot == time_slot]
+        # 일차별로 스팟 분배
+        spots_per_day = (total_spots + total_days - 1) // total_days  # 올림 계산
+        daily_spot_indices = {}
+        for day in range(1, total_days + 1):
+            start_index = (day - 1) * spots_per_day
+            end_index = start_index + spots_per_day
+            if start_index < total_spots:
+                daily_spot_indices[day] = sorted_location_indices[start_index:end_index]
 
-            for spot in slot_spots:
-                days_assignment[spot_index] = current_day
-                spot_index += 1
-
-                # 하루 최대 스팟 수 초과 시 다음 날로
-                spots_in_current_day = sum(
-                    1 for day in days_assignment.values() if day == current_day
-                )
-                if spots_in_current_day >= spots_per_day:
-                    current_day += 1
-
-        return days_assignment
+        return daily_spot_indices
 
     async def _generate_detailed_routes(
         self,
@@ -321,19 +275,13 @@ class RouteService:
         self,
         request: RouteCalculationRequest,
         spots_data: Dict[str, Any],
-        tsp_solutions: Dict[int, TSPSolution],
+        calc_output: RouteCalculationOutput,
         detailed_routes: Dict[int, Dict[str, Any]],
         locations: List[LocationCoordinate],
     ) -> Any:  # Route model
         """7️⃣ 데이터베이스 저장"""
 
         # 전체 통계 계산
-        total_distance = sum(
-            sol.total_distance_meters for sol in tsp_solutions.values()
-        )
-        total_duration = sum(
-            sol.total_duration_seconds for sol in tsp_solutions.values()
-        )
         total_spots = len(spots_data["selected_spots"])
 
         # Route 데이터 준비
@@ -343,8 +291,10 @@ class RouteService:
             "total_days": spots_data["total_days"],
             "departure_location": request.departure_location,
             "hotel_location": request.hotel_location,
-            "total_distance_km": Decimal(str(round(total_distance / 1000, 2))),
-            "total_duration_minutes": total_duration // 60,
+            "total_distance_km": Decimal(
+                str(round(calc_output.total_distance_meters / 1000, 2))
+            ),
+            "total_duration_minutes": calc_output.total_duration_seconds // 60,
             "total_spots_count": total_spots,
             "google_maps_data": {
                 "travel_mode": request.travel_mode,
@@ -355,14 +305,14 @@ class RouteService:
                         "duration_seconds": sol.total_duration_seconds,
                         "solve_time": sol.solve_time_seconds,
                     }
-                    for day, sol in tsp_solutions.items()
+                    for day, sol in calc_output.tsp_solutions.items()
                 },
             },
         }
 
         # RouteDay 데이터 준비
         days_data = []
-        for day, solution in tsp_solutions.items():
+        for day, solution in calc_output.tsp_solutions.items():
             day_route = detailed_routes.get(day, {})
 
             day_data = {
@@ -386,14 +336,17 @@ class RouteService:
                 ),
                 "route_geometry": {
                     "polyline": (
-                        day_route.get("directions", {}).get("polyline")
+                        day_route.get("directions").polyline
                         if day_route.get("directions")
                         else None
                     ),
                     "bounds": None,  # 필요시 추가
                 },
-                "segments": self._create_segments_data(
-                    day_route.get("segments", []), locations
+                "segments": self._create_segments_data_with_directions(
+                    day_route.get("segments", []),
+                    locations,
+                    request.travel_mode,
+                    day_route.get("directions"),
                 ),
             }
             days_data.append(day_data)
@@ -494,9 +447,12 @@ class RouteService:
         }
 
     def _create_segments_data(
-        self, segments: List[Tuple[int, int]], locations: List[LocationCoordinate]
+        self,
+        segments: List[Tuple[int, int]],
+        locations: List[LocationCoordinate],
+        travel_mode: str = "DRIVING",
     ) -> List[Dict[str, Any]]:
-        """구간 데이터 생성"""
+        """구간 데이터 생성 (기본 버전)"""
         segments_data = []
 
         for order, (from_idx, to_idx) in enumerate(segments):
@@ -506,8 +462,53 @@ class RouteService:
                 "to_spot_name": locations[to_idx].name,
                 "distance_meters": None,  # 실제 거리는 Google Maps에서 가져옴
                 "duration_seconds": None,
-                "travel_mode": "DRIVING",  # 기본값
+                "travel_mode": travel_mode.upper(),  # 요청에서 받은 travel_mode 사용
             }
+            segments_data.append(segment_data)
+
+        return segments_data
+
+    def _create_segments_data_with_directions(
+        self,
+        segments: List[Tuple[int, int]],
+        locations: List[LocationCoordinate],
+        travel_mode: str = "DRIVING",
+        directions_result=None,
+    ) -> List[Dict[str, Any]]:
+        """구간 데이터 생성 (Google Maps 결과 포함)"""
+        segments_data = []
+
+        # Google Maps 결과에서 개별 leg 정보 추출
+        legs_data = []
+        if directions_result and hasattr(directions_result, "steps"):
+            # steps를 legs로 변환 (간단한 구현)
+            # 실제로는 legs 정보가 directions_result에 포함되어야 함
+            pass
+
+        for order, (from_idx, to_idx) in enumerate(segments):
+            # 기본 segment 데이터
+            segment_data = {
+                "segment_order": order + 1,
+                "from_location": locations[from_idx].name,
+                "to_spot_name": locations[to_idx].name,
+                "distance_meters": None,
+                "duration_seconds": None,
+                "travel_mode": travel_mode.upper(),
+            }
+
+            # Google Maps 결과가 있고 해당하는 leg가 있으면 실제 데이터 사용
+            if directions_result and hasattr(directions_result, "distance_meters"):
+                # 전체 경로에서 개별 구간을 추정하는 로직
+                # 실제로는 각 leg의 거리/시간을 개별적으로 받아야 함
+                total_segments = len(segments)
+                if total_segments > 0:
+                    segment_data["distance_meters"] = (
+                        directions_result.distance_meters // total_segments
+                    )
+                    segment_data["duration_seconds"] = (
+                        directions_result.duration_seconds // total_segments
+                    )
+
             segments_data.append(segment_data)
 
         return segments_data
