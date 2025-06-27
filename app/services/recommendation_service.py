@@ -55,12 +55,12 @@ class RecommendationService:
             self._executor = ThreadPoolExecutor(max_workers=8)  # 더 많은 워커
             self._cache_ttl = 3600  # 1시간 캐시 TTL
 
-            # 강화된 배치 설정
-            self._max_keywords = 3  # 5개 → 3개로 감소
-            self._places_per_keyword = 10  # 더 적은 수로 최적화
-            self._vector_limit = 50  # 80개 → 50개
-            self._final_limit = 24  # 30개 → 24개
-            self._batch_size = 30  # 큰 배치 크기
+            # 강화된 배치 설정 (키워드 증가로 정확도 향상)
+            self._max_keywords = 8  # 3개 → 8개로 증가 (정확도 향상)
+            self._places_per_keyword = 12  # 키워드당 더 많은 결과
+            self._vector_limit = 80  # 50개 → 80개로 복원
+            self._final_limit = 30  # 24개 → 30개로 증가
+            self._batch_size = 50  # 더 큰 배치 크기
 
             print("✅ RecommendationService初期化完了")
 
@@ -308,21 +308,29 @@ class RecommendationService:
             )
 
     async def _generate_keywords_optimized(self, pre_info: PreInfo) -> List[str]:
-        """최적화된 키워드 생성 (개수 감소)"""
+        """최적화된 키워드 생성 (개수 증가로 정확도 향상)"""
         if self.llm_service is None:
             return [
                 f"{pre_info.region} {pre_info.atmosphere}",
                 f"{pre_info.region} 공원",
                 f"{pre_info.region} 카페",
+                f"{pre_info.region} 관광",
+                f"{pre_info.region} 그룹",
+                f"{pre_info.region} 문화",
+                f"{pre_info.region} 자연",
+                f"{pre_info.region} 야경",
             ]
 
         try:
             keywords, _ = await self.llm_service.generate_keywords_and_weights(pre_info)
-            return keywords[: self._max_keywords]  # 3개만 사용
+            return keywords[: self._max_keywords]  # 8개 사용
         except:
             return [
                 f"{pre_info.region} {pre_info.atmosphere}",
                 f"{pre_info.region} 명소",
+                f"{pre_info.region} 카페",
+                f"{pre_info.region} 관광",
+                f"{pre_info.region} 문화",
             ]
 
     async def _prepare_basic_search(self, pre_info: PreInfo) -> List[str]:
