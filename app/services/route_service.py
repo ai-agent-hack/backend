@@ -72,19 +72,12 @@ class RouteService:
             latest_route = self.route_repository.get_latest_by_plan(request.plan_id)
             latest_version = latest_route.version if latest_route else 1
 
-            # 2. pre_info에서 출발지와 호텔 정보 가져오기
+            # 2. pre_info 조회 (기본 정보만)
             pre_info = self.pre_info_repository.get_by_plan_id(request.plan_id)
             if not pre_info:
                 raise ValueError(
                     f"Plan {request.plan_id}에 대한 pre_info를 찾을 수 없습니다."
                 )
-
-            # departure_location과 hotel_location을 pre_info에서 추출
-            departure_location = pre_info.region
-            hotel_location = pre_info.region  # region을 기본 위치로 사용
-
-            if not departure_location:
-                raise ValueError("출발지 정보를 찾을 수 없습니다.")
 
             # 기존 경로 데이터가 있다면 삭제
             existing_route = self.route_repository.get_by_plan_and_version(
@@ -100,9 +93,7 @@ class RouteService:
             if not spots_data["selected_spots"]:
                 raise ValueError("선택된 스팟이 없습니다.")
 
-            locations, location_mapping = self._create_location_coordinates(
-                spots_data, departure_location, hotel_location
-            )
+            locations, location_mapping = self._create_location_coordinates(spots_data)
 
             calculation_input = RouteCalculationInput(
                 plan_id=request.plan_id,
@@ -133,6 +124,7 @@ class RouteService:
                 calculation_output,
                 detailed_routes,
                 locations,
+                latest_version,
             )
 
             calculation_time = time.time() - start_time
@@ -176,22 +168,14 @@ class RouteService:
         }
 
     def _create_location_coordinates(
-        self,
-        spots_data: Dict[str, Any],
-        departure_location: str,
-        hotel_location: Optional[str],
+        self, spots_data: Dict[str, Any]
     ) -> Tuple[List[LocationCoordinate], Dict[str, int]]:
-        """2️⃣ 座標変換"""
+        """스팟들만으로 좌표 리스트 생성"""
         locations = []
         location_mapping = {}
 
-        # 출발지 추가
-        departure_coord = self._parse_location_string(departure_location)
-        locations.append(departure_coord)
-        location_mapping["departure"] = 0
-
-        # 스팟들 추가
-        for spot in spots_data["selected_spots"]:
+        # 스팟들만 추가 (출발지/호텔 개념 제거)
+        for i, spot in enumerate(spots_data["selected_spots"]):
             if spot.latitude and spot.longitude:
                 coord = LocationCoordinate(
                     latitude=float(spot.latitude),
@@ -199,15 +183,7 @@ class RouteService:
                     name=spot.spot_name,
                 )
                 locations.append(coord)
-                location_mapping[f"spot_{spot.id}"] = len(locations) - 1
-
-        # 호텔 추가 (출발지와 다른 경우)
-        if hotel_location and hotel_location != departure_location:
-            hotel_coord = self._parse_location_string(hotel_location)
-            locations.append(hotel_coord)
-            location_mapping["hotel"] = len(locations) - 1
-        else:
-            location_mapping["hotel"] = location_mapping["departure"]
+                location_mapping[f"spot_{spot.id}"] = i
 
         return locations, location_mapping
 
@@ -221,10 +197,8 @@ class RouteService:
         if total_spots == 0 or total_days == 0:
             return {}
 
-        # 스팟의 위치 인덱스(locations 리스트 기준)를 매핑. 스팟은 1부터 시작.
-        spot_location_index_map = {
-            spot.id: i + 1 for i, spot in enumerate(selected_spots)
-        }
+        # 스팟의 위치 인덱스(locations 리스트 기준)를 매핑. 스팟은 0부터 시작.
+        spot_location_index_map = {spot.id: i for i, spot in enumerate(selected_spots)}
 
         # 시간대 순서로 스팟 정렬
         time_slot_map = {"MORNING": 0, "AFTERNOON": 1, "NIGHT": 2}
@@ -254,7 +228,7 @@ class RouteService:
         locations: List[LocationCoordinate],
         travel_mode: str,
     ) -> Dict[int, Dict[str, Any]]:
-        """6️⃣ 상세 경로 생성"""
+        """6️⃣ 간소화된 경로 생성 - 좌표만 포함"""
         detailed_routes = {}
 
         for day, solution in tsp_solutions.items():
@@ -264,30 +238,12 @@ class RouteService:
             # 해당 일차의 LocationCoordinate 리스트 생성
             day_locations = [locations[idx] for idx in solution.optimal_order]
 
-            try:
-                # Google Maps Directions API 호출
-                directions = await self.google_maps_service.get_directions(
-                    origin=day_locations[0],
-                    destination=day_locations[-1],
-                    waypoints=day_locations[1:-1] if len(day_locations) > 2 else None,
-                    travel_mode=travel_mode,
-                    optimize_waypoints=False,  # 이미 TSP로 최적화됨
-                )
-
-                detailed_routes[day] = {
-                    "directions": directions,
-                    "locations": day_locations,
-                    "segments": self._create_route_segments(solution, locations),
-                }
-
-            except Exception as e:
-                logger.warning(f"Day {day} 상세 경로 생성 실패: {e}")
-                # 기본 구간 정보만 생성
-                detailed_routes[day] = {
-                    "directions": None,
-                    "locations": day_locations,
-                    "segments": self._create_route_segments(solution, locations),
-                }
+            # 간단한 좌표 정보만 포함
+            detailed_routes[day] = {
+                "locations": day_locations,
+                "segments": self._create_route_segments(solution, locations),
+                "coordinates": [[loc.latitude, loc.longitude] for loc in day_locations],
+            }
 
         return detailed_routes
 
@@ -298,19 +254,18 @@ class RouteService:
         calc_output: RouteCalculationOutput,
         detailed_routes: Dict[int, Dict[str, Any]],
         locations: List[LocationCoordinate],
+        latest_version: int,
     ) -> Any:  # Route model
         """7️⃣ 데이터베이스 저장"""
 
         # 전체 통계 계산
         total_spots = len(spots_data["selected_spots"])
 
-        # Route 데이터 준비
+        # Route 데이터 준비 (departure_location, hotel_location 제거)
         route_data = {
             "plan_id": request.plan_id,
-            "version": request.version,
+            "version": latest_version,
             "total_days": spots_data["total_days"],
-            "departure_location": request.departure_location,
-            "hotel_location": request.hotel_location,
             "total_distance_km": Decimal(
                 str(round(calc_output.total_distance_meters / 1000, 2))
             ),
@@ -355,18 +310,12 @@ class RouteService:
                     solution, locations, spots_data
                 ),
                 "route_geometry": {
-                    "polyline": (
-                        day_route.get("directions").polyline
-                        if day_route.get("directions")
-                        else None
-                    ),
-                    "bounds": None,  # 필요시 추가
+                    "coordinates": day_route.get("coordinates", []),
                 },
-                "segments": self._create_segments_data_with_directions(
+                "segments": self._create_segments_data(
                     day_route.get("segments", []),
                     locations,
                     request.travel_mode,
-                    day_route.get("directions"),
                 ),
             }
             days_data.append(day_data)
@@ -488,51 +437,6 @@ class RouteService:
 
         return segments_data
 
-    def _create_segments_data_with_directions(
-        self,
-        segments: List[Tuple[int, int]],
-        locations: List[LocationCoordinate],
-        travel_mode: str = "DRIVING",
-        directions_result=None,
-    ) -> List[Dict[str, Any]]:
-        """구간 데이터 생성 (Google Maps 결과 포함)"""
-        segments_data = []
-
-        # Google Maps 결과에서 개별 leg 정보 추출
-        legs_data = []
-        if directions_result and hasattr(directions_result, "steps"):
-            # steps를 legs로 변환 (간단한 구현)
-            # 실제로는 legs 정보가 directions_result에 포함되어야 함
-            pass
-
-        for order, (from_idx, to_idx) in enumerate(segments):
-            # 기본 segment 데이터
-            segment_data = {
-                "segment_order": order + 1,
-                "from_location": locations[from_idx].name,
-                "to_spot_name": locations[to_idx].name,
-                "distance_meters": None,
-                "duration_seconds": None,
-                "travel_mode": travel_mode.upper(),
-            }
-
-            # Google Maps 결과가 있고 해당하는 leg가 있으면 실제 데이터 사용
-            if directions_result and hasattr(directions_result, "distance_meters"):
-                # 전체 경로에서 개별 구간을 추정하는 로직
-                # 실제로는 각 leg의 거리/시간을 개별적으로 받아야 함
-                total_segments = len(segments)
-                if total_segments > 0:
-                    segment_data["distance_meters"] = (
-                        directions_result.distance_meters // total_segments
-                    )
-                    segment_data["duration_seconds"] = (
-                        directions_result.duration_seconds // total_segments
-                    )
-
-            segments_data.append(segment_data)
-
-        return segments_data
-
     def _create_route_segments(
         self, solution: TSPSolution, locations: List[LocationCoordinate]
     ) -> List[Tuple[int, int]]:
@@ -547,8 +451,6 @@ class RouteService:
 
     def _parse_location_string(self, location_str: str) -> LocationCoordinate:
         """문자열 위치를 LocationCoordinate로 변환"""
-        # 간단한 구현: "37.5563,126.9720" 형식 가정
-        # 실제로는 더 복잡한 파싱 로직 필요 (주소 → 좌표 변환 등)
         try:
             if "," in location_str:
                 lat_str, lng_str = location_str.split(",")
@@ -558,10 +460,29 @@ class RouteService:
                     name=f"Location({lat_str.strip()},{lng_str.strip()})",
                 )
             else:
-                # 주소인 경우 기본 서울역 좌표 사용 (임시)
-                return LocationCoordinate(
-                    latitude=37.5563, longitude=126.9720, name=location_str
-                )
+                # 지역명을 좌표로 변환
+                location_mapping = {
+                    "kobe": {"lat": 34.6937, "lng": 135.5023, "name": "Kobe, Japan"},
+                    "osaka": {"lat": 34.6937, "lng": 135.5021, "name": "Osaka, Japan"},
+                    "tokyo": {"lat": 35.6762, "lng": 139.6503, "name": "Tokyo, Japan"},
+                    "kyoto": {"lat": 35.0116, "lng": 135.7681, "name": "Kyoto, Japan"},
+                    "seoul": {"lat": 37.5665, "lng": 126.9780, "name": "Seoul, Korea"},
+                    "busan": {"lat": 35.1796, "lng": 129.0756, "name": "Busan, Korea"},
+                }
+
+                location_key = location_str.lower().strip()
+                if location_key in location_mapping:
+                    coord_info = location_mapping[location_key]
+                    return LocationCoordinate(
+                        latitude=coord_info["lat"],
+                        longitude=coord_info["lng"],
+                        name=coord_info["name"],
+                    )
+                else:
+                    # 매핑되지 않은 지역은 서울역 기본값
+                    return LocationCoordinate(
+                        latitude=37.5563, longitude=126.9720, name=location_str
+                    )
         except Exception:
             # 파싱 실패 시 기본 좌표
             return LocationCoordinate(
@@ -594,8 +515,6 @@ class RouteService:
             "plan_id": route.plan_id,
             "version": route.version,
             "total_days": route.total_days,
-            "departure_location": route.departure_location,
-            "hotel_location": route.hotel_location,
             "total_distance_km": (
                 float(route.total_distance_km) if route.total_distance_km else None
             ),
@@ -640,7 +559,6 @@ class RouteService:
                     "distance_meters": segment.distance_meters,
                     "duration_seconds": segment.duration_seconds,
                     "travel_mode": segment.travel_mode,
-                    "directions_steps": segment.directions_steps,
                 }
                 day_data["route_segments"].append(segment_data)
 
@@ -674,8 +592,6 @@ class RouteService:
             "plan_id": route.plan_id,
             "version": route.version,
             "total_days": route.total_days,
-            "departure_location": route.departure_location,
-            "hotel_location": route.hotel_location,
             "calculated_at": (
                 route.calculated_at.isoformat() if route.calculated_at else None
             ),
@@ -717,30 +633,6 @@ class RouteService:
         }
 
         return full_details
-
-    def _create_navigation_data(self, route) -> Dict[str, Any]:
-        """내비게이션 데이터 생성"""
-        navigation_data = {
-            "route_id": route.id,
-            "total_distance_km": (
-                float(route.total_distance_km) if route.total_distance_km else 0
-            ),
-            "total_duration_minutes": route.total_duration_minutes or 0,
-            "days": [],
-        }
-
-        for route_day in route.route_days:
-            day_nav = {
-                "day_number": route_day.day_number,
-                "start_location": route_day.start_location,
-                "end_location": route_day.end_location,
-                "segments": [
-                    seg.to_navigation_dict() for seg in route_day.route_segments
-                ],
-            }
-            navigation_data["days"].append(day_nav)
-
-        return navigation_data
 
     # === 부분 수정 메서드들 ===
 

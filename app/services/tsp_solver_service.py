@@ -355,8 +355,6 @@ class TSPSolverService:
         locations: List[LocationCoordinate],
         distance_matrix_result: List[List[DistanceMatrixResult]],
         days_assignment: Dict[int, List[int]],
-        start_location_index: int,
-        hotel_location_index: Optional[int],
         optimize_for: str = "distance",
     ) -> Dict[int, TSPSolution]:
         """
@@ -375,13 +373,8 @@ class TSPSolverService:
             if not spot_indices:
                 continue
 
-            day_start_node = start_location_index if day == 1 else hotel_location_index
-            day_end_node = hotel_location_index
-
-            # 해당 날짜의 로케이션 집합
-            day_locations_indices = {day_start_node} | set(spot_indices)
-            if day_end_node is not None:
-                day_locations_indices.add(day_end_node)
+            # 출발지/호텔 개념 제거 - 순수하게 스팟들만 사용
+            day_locations_indices = set(spot_indices)
 
             # 해당 날짜의 로케이션만으로 새로운 매핑과 매트릭스 생성
             sub_location_list = sorted(list(day_locations_indices))
@@ -400,10 +393,9 @@ class TSPSolverService:
                         (r_original, c_original)
                     )
 
-            sub_start_idx = sub_map[day_start_node]
-            sub_end_idx = (
-                sub_map.get(day_end_node) if day_end_node is not None else None
-            )
+            # 첫 번째 스팟을 시작점으로 사용
+            sub_start_idx = 0
+            sub_end_idx = None  # 원형 경로가 아닌 자유 경로
 
             try:
                 solution = self.solve_tsp(

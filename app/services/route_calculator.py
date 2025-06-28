@@ -70,8 +70,6 @@ class RouteCalculator:
                     locations=self.input.locations,
                     distance_matrix_result=cost_matrix_result,
                     days_assignment=daily_spot_indices,
-                    start_location_index=self.input.location_mapping["departure"],
-                    hotel_location_index=self.input.location_mapping.get("hotel"),
                     optimize_for=self.input.optimize_for,
                 )
             )
@@ -92,7 +90,7 @@ class RouteCalculator:
             return {}
 
         spot_location_index_map = {
-            spot.spot_id: i + 1 for i, spot in enumerate(self.input.selected_spots)
+            spot.spot_id: i for i, spot in enumerate(self.input.selected_spots)
         }
 
         time_slot_map = {"MORNING": 0, "AFTERNOON": 1, "NIGHT": 2}
