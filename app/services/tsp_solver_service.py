@@ -2,8 +2,10 @@ import logging
 from typing import List, Dict, Tuple, Optional, Any
 from dataclasses import dataclass
 import math
+from datetime import datetime, timedelta
 
 from app.services.google_maps_service import LocationCoordinate, DistanceMatrixResult
+from app.models.rec_spot import RecSpot  # RecSpot 모델 임포트
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,80 @@ class TSPSolution:
     solve_time_seconds: float
 
 
+class TimeAwareCostEvaluator:
+    """시간대와 혼잡도를 고려하여 동적으로 비용을 계산하는 클래스"""
+
+    def __init__(
+        self,
+        manager,
+        distance_matrix: Dict[Tuple[int, int], DistanceMatrixResult],
+        spots_data: List[RecSpot],
+        start_time_of_day: int = 9 * 3600,  # 오전 9시 (초)
+    ):
+        self.manager = manager
+        self.distance_matrix = distance_matrix
+        self.spots_data = {
+            i: spot for i, spot in enumerate(spots_data)
+        }  # 인덱스로 스팟 데이터 접근
+        self.cumulative_time = {}  # {node_index: time_in_seconds}
+        self.start_time_of_day = start_time_of_day
+
+    def get_cost(self, from_index, to_index) -> int:
+        """총 비용 = 이동 시간 + 시간대 패널티 + 혼잡도 패널티"""
+        from_node = self.manager.IndexToNode(from_index)
+        to_node = self.manager.IndexToNode(to_index)
+
+        # 1. 기본 이동 시간 (초)
+        travel_duration = self.distance_matrix.get(
+            (from_node, to_node), DistanceMatrixResult()
+        ).duration_seconds
+
+        # 2. 도착 시간 계산
+        current_time = self.cumulative_time.get(from_node, self.start_time_of_day)
+        arrival_time = current_time + travel_duration
+        self.cumulative_time[to_node] = arrival_time
+
+        # 3. 패널티 계산
+        to_spot = self.spots_data.get(to_node)
+        if not to_spot:
+            return travel_duration  # 스팟 정보가 없으면 기본 이동 시간만 반환
+
+        time_penalty = self._calculate_time_slot_penalty(to_spot, arrival_time)
+        congestion_penalty = self._calculate_congestion_penalty(to_spot, arrival_time)
+
+        # 총 비용 반환 (정수형)
+        total_cost = travel_duration + time_penalty + congestion_penalty
+        return int(total_cost)
+
+    def _calculate_time_slot_penalty(self, spot: RecSpot, arrival_time: int) -> int:
+        """시간대 패널티 계산"""
+        hour = (arrival_time // 3600) % 24
+        spot_time_slot = (spot.time_slot or "AFTERNOON").upper()
+
+        # 시간대에 맞지 않으면 높은 패널티 (예: 2시간)
+        if spot_time_slot == "MORNING" and not (8 <= hour < 12):
+            return 2 * 3600
+        if spot_time_slot == "AFTERNOON" and not (12 <= hour < 18):
+            return 2 * 3600
+        if spot_time_slot == "NIGHT" and not (18 <= hour < 23):
+            return 2 * 3600
+        return 0
+
+    def _calculate_congestion_penalty(self, spot: RecSpot, arrival_time: int) -> int:
+        """혼잡도 패널티 계산"""
+        hour = (arrival_time // 3600) % 24
+        details = spot.spot_details or {}
+        congestion_data = details.get("congestion", [])
+
+        if not congestion_data or len(congestion_data) < 24:
+            return 0
+
+        congestion_level = congestion_data[hour]  # 0~100
+        # 혼잡도 100일 때 최대 3시간 패널티
+        penalty = int((congestion_level / 100) * (3 * 3600))
+        return penalty
+
+
 class TSPSolverService:
     """
     TSP(Traveling Salesman Problem) 해결 서비스.
@@ -32,16 +108,18 @@ class TSPSolverService:
     def solve_tsp(
         self,
         distance_matrix: Dict[Tuple[int, int], DistanceMatrixResult],
+        spots_data: List[RecSpot],
         num_locations: int,
         start_index: int = 0,
         end_index: Optional[int] = None,
-        optimize_for: str = "distance",  # "distance" or "time"
+        optimize_for: str = "time",  # 시간 최적화를 기본으로 변경
     ) -> TSPSolution:
         """
         TSP 문제 해결
 
         Args:
             distance_matrix: 거리 매트릭스 딕셔너리
+            spots_data: 스팟 데이터 리스트
             num_locations: 전체 위치 수
             start_index: 시작 지점 인덱스
             end_index: 종료 지점 인덱스 (None이면 start_index와 동일)
@@ -57,7 +135,12 @@ class TSPSolverService:
         try:
             # OR-Tools 사용 시도
             solution = self._solve_with_ortools(
-                distance_matrix, num_locations, start_index, end_index, optimize_for
+                distance_matrix,
+                spots_data,
+                num_locations,
+                start_index,
+                end_index,
+                optimize_for,
             )
         except ImportError:
             logger.warning(
@@ -80,6 +163,7 @@ class TSPSolverService:
     def _solve_with_ortools(
         self,
         distance_matrix: Dict[Tuple[int, int], DistanceMatrixResult],
+        spots_data: List[RecSpot],
         num_locations: int,
         start_index: int,
         end_index: Optional[int],
@@ -96,22 +180,20 @@ class TSPSolverService:
         if end_index is None:
             end_index = start_index
 
-        # 거리 매트릭스를 2D 배열로 변환
-        matrix = self._create_matrix_array(distance_matrix, num_locations, optimize_for)
-
         # TSP 모델 생성 (시작 및 종료 지점 지정)
         manager = pywrapcp.RoutingIndexManager(
             num_locations, 1, [start_index], [end_index]
         )
         routing = pywrapcp.RoutingModel(manager)
 
-        def distance_callback(from_index, to_index):
-            """거리 콜백 함수"""
-            from_node = manager.IndexToNode(from_index)
-            to_node = manager.IndexToNode(to_index)
-            return matrix[from_node][to_node]
+        # 시간 인식을 위한 비용 콜백 등록
+        cost_evaluator = TimeAwareCostEvaluator(
+            manager, distance_matrix, spots_data
+        )  # spots_data 전달
+        transit_callback_index = routing.RegisterTransitCallback(
+            cost_evaluator.get_cost
+        )
 
-        transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
         # 검색 파라미터 설정
@@ -353,6 +435,7 @@ class TSPSolverService:
     def solve_multi_day_tsp(
         self,
         locations: List[LocationCoordinate],
+        spots_data: List[RecSpot],
         distance_matrix_result: List[List[DistanceMatrixResult]],
         days_assignment: Dict[int, List[int]],
         optimize_for: str = "distance",
@@ -397,9 +480,13 @@ class TSPSolverService:
             sub_start_idx = 0
             sub_end_idx = None  # 원형 경로가 아닌 자유 경로
 
+            # 전체 스팟 데이터에서 현재 날짜에 해당하는 스팟 데이터만 필터링
+            sub_spots_data = [spots_data[i] for i in sub_location_list]
+
             try:
                 solution = self.solve_tsp(
                     distance_matrix=sub_dist_matrix_dict,
+                    spots_data=sub_spots_data,
                     num_locations=len(sub_location_list),
                     start_index=sub_start_idx,
                     end_index=sub_end_idx,

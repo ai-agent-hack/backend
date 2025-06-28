@@ -68,6 +68,7 @@ class RouteCalculator:
             self.output.tsp_solutions = (
                 self.input.tsp_solver_service.solve_multi_day_tsp(
                     locations=self.input.locations,
+                    spots_data=self.input.selected_spots,
                     distance_matrix_result=cost_matrix_result,
                     days_assignment=daily_spot_indices,
                     optimize_for=self.input.optimize_for,
