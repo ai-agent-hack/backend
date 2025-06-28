@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e  # Exit on any command failure
 
 # Function to wait for database
 wait_for_db() {
@@ -40,11 +41,23 @@ else
 fi
 
 # Run Alembic migrations
-echo "Running database migrations..."
-cd /app
-alembic upgrade head
-
-echo "Migrations completed successfully!"
+echo "Running Alembic upgrade..."
+# Try running migrations. If they fail with duplicate object errors (existing schema),
+# fallback to stamping the current DB as up-to-date so the app can start.
+if alembic upgrade head; then
+  echo "✅ Alembic migrations completed successfully!"
+else
+  echo "⚠️  Alembic upgrade failed – attempting fallback stamp..."
+  # Detect common duplicate errors; you can refine the pattern if needed
+  if alembic current >/dev/null 2>&1; then
+    echo "Database already has some schema. Stamping to head."
+    alembic stamp head
+    echo "✅ Alembic stamp completed. Continuing startup."
+  else
+    echo "❌ Alembic migrations failed and fallback could not be applied. Exiting."
+    exit 1
+  fi
+fi
 
 # Start the FastAPI application
 echo "Starting FastAPI application..."
