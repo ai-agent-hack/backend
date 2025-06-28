@@ -68,29 +68,45 @@ class RouteService:
         start_time = time.time()
 
         try:
+            # 1. 최신 버전 가져오기
+            latest_route = self.route_repository.get_latest_by_plan(request.plan_id)
+            latest_version = latest_route.version if latest_route else 1
+
+            # 2. pre_info에서 출발지와 호텔 정보 가져오기
+            pre_info = self.pre_info_repository.get_by_plan_id(request.plan_id)
+            if not pre_info:
+                raise ValueError(
+                    f"Plan {request.plan_id}에 대한 pre_info를 찾을 수 없습니다."
+                )
+
+            # departure_location과 hotel_location을 pre_info에서 추출
+            departure_location = pre_info.region
+            hotel_location = pre_info.region  # region을 기본 위치로 사용
+
+            if not departure_location:
+                raise ValueError("출발지 정보를 찾을 수 없습니다.")
+
             # 기존 경로 데이터가 있다면 삭제
             existing_route = self.route_repository.get_by_plan_and_version(
-                request.plan_id, request.version
+                request.plan_id, latest_version
             )
             if existing_route:
                 self.route_repository.delete_by_plan_and_version(
-                    request.plan_id, request.version
+                    request.plan_id, latest_version
                 )
 
-            # 1. 계산에 필요한 입력 데이터 준비
-            spots_data = await self._collect_spots_data(
-                request.plan_id, request.version
-            )
+            # 3. 계산에 필요한 입력 데이터 준비
+            spots_data = await self._collect_spots_data(request.plan_id, latest_version)
             if not spots_data["selected_spots"]:
                 raise ValueError("선택된 스팟이 없습니다.")
 
             locations, location_mapping = self._create_location_coordinates(
-                spots_data, request.departure_location, request.hotel_location
+                spots_data, departure_location, hotel_location
             )
 
             calculation_input = RouteCalculationInput(
                 plan_id=request.plan_id,
-                version=request.version,
+                version=latest_version,
                 selected_spots=spots_data["selected_spots"],
                 total_days=spots_data["total_days"],
                 locations=locations,
@@ -122,8 +138,12 @@ class RouteService:
             calculation_time = time.time() - start_time
             return RouteCalculationResponse(
                 success=True,
-                plan_id=route.plan_id,
-                version=route.version,
+                route_id=route.id,
+                total_distance_km=(
+                    float(route.total_distance_km) if route.total_distance_km else None
+                ),
+                total_duration_minutes=route.total_duration_minutes,
+                total_spots_count=route.total_spots_count,
                 calculation_time_seconds=calculation_time,
             )
 

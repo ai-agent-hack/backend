@@ -181,9 +181,6 @@ class RouteCalculationRequest(BaseModel):
     """ルート計算リクエストスキーマ"""
 
     plan_id: str
-    version: int
-    departure_location: Optional[str] = None
-    hotel_location: Optional[str] = None
     travel_mode: str = Field("TRANSIT", max_length=20)
     optimize_for: str = Field("distance", description="distance or time")
 

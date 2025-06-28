@@ -90,10 +90,15 @@ async def calculate_route_with_details(
                 detail=calculation_result.error_message or "Route calculation failed",
             )
 
-        # 2. 계산 성공 시 완전한 상세 정보 조회
+        # 2. 계산 성공 시 완전한 상세 정보 조회 - 최신 버전으로 조회
+        latest_route = route_service.route_repository.get_latest_by_plan(
+            request.plan_id
+        )
+        latest_version = latest_route.version if latest_route else 1
+
         route_full_details = await route_service.get_route_full_details(
             request.plan_id,
-            request.version,
+            latest_version,
             calculation_time_seconds=calculation_result.calculation_time_seconds,
         )
 
@@ -142,15 +147,15 @@ async def regenerate_route_as_new_version(
             new_version = 1
 
         # 기존 버전에서 선택된 스팟들을 새 버전으로 복사
-        if request.version:
+        if latest_route:
             # 기존 RecPlan에서 pre_info_id 가져오기
             existing_plan = rec_plan_repository.get_by_plan_id_and_version(
-                request.plan_id, request.version
+                request.plan_id, latest_route.version
             )
             if not existing_plan:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Plan not found: plan_id={request.plan_id}, version={request.version}",
+                    detail=f"Plan not found: plan_id={request.plan_id}, version={latest_route.version}",
                 )
 
             # 새 버전의 RecPlan 생성
@@ -166,7 +171,7 @@ async def regenerate_route_as_new_version(
             db.refresh(new_plan)
 
             existing_spots = rec_spot_repository.get_selected_spots_by_plan_version(
-                request.plan_id, request.version
+                request.plan_id, latest_route.version
             )
             if existing_spots:
                 # 기존 스팟들을 새 버전으로 복사
@@ -194,12 +199,9 @@ async def regenerate_route_as_new_version(
                 # 새 버전으로 스팟들 생성
                 rec_spot_repository.create_spots_batch(new_spots_data)
 
-        # 새 버전으로 요청 업데이트
+                # 새 버전으로 요청 업데이트
         new_request = RouteCalculationRequest(
             plan_id=request.plan_id,
-            version=new_version,
-            departure_location=request.departure_location,
-            hotel_location=request.hotel_location,
             travel_mode=request.travel_mode,
             optimize_for=request.optimize_for,
         )
@@ -630,12 +632,10 @@ async def test_route_calculation(
 
     Test route calculation functionality with dummy data.
     Used for development and debugging purposes.
+    Note: Requires pre_info data for test_plan to exist.
     """
     test_request = RouteCalculationRequest(
         plan_id="test_plan",
-        version=1,
-        departure_location="37.5563,126.9720",  # Seoul Station
-        hotel_location="37.4979,127.0276",  # Gangnam Station
         travel_mode="DRIVING",
         optimize_for="distance",
     )
