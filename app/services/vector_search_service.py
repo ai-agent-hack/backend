@@ -262,3 +262,14 @@ class VectorSearchService:
         except Exception as e:
             print(f"❌ 類似度計算失敗: {str(e)}")
             return 0.5  # 中立値
+
+    async def get_similar_spots_by_pre_info(
+        self, pre_info: PreInfo
+    ) -> List[Dict[str, Any]]:
+        """호환성을 위한 플레이스홀더 메서드.
+
+        RecommendationService 의 get_recommendations 에서 pre_info 만 전달하여 호출되므로
+        여기서는 일단 빈 리스트를 반환합니다. 추후 필요하면 pre_info 를 이용해 적절한 검색을
+        수행하도록 개선할 수 있습니다.
+        """
+        return []

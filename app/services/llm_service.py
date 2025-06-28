@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import List, Dict, Any, Tuple
 from google.oauth2 import service_account
@@ -7,6 +8,9 @@ from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 from app.models.pre_info import PreInfo
 from app.core.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class LLMService:
@@ -120,6 +124,14 @@ class LLMService:
             if not keywords or not converted_weights:
                 raise Exception("LLM応答にキーワードまたは重みがありません")
 
+            # 포스트 프로세싱: '可愛い カフェ' 요청 보강
+            atmosphere_lower = pre_info.atmosphere or ""
+            if ("可愛い" in atmosphere_lower) and ("カフェ" in atmosphere_lower):
+                cute_cafe_kw = f"{pre_info.region} 可愛いカフェ"
+                if cute_cafe_kw not in keywords:
+                    # 최우선에 추가
+                    keywords = [cute_cafe_kw] + keywords
+
             print(f"✅ LLMキーワード生成成功: {keywords}")
             print(f"✅ LLM重み生成: {converted_weights}")
             return keywords, converted_weights
@@ -178,6 +190,22 @@ class LLMService:
 }}
 
 雰囲気 '{pre_info.atmosphere}' を核心として {pre_info.region} 地域の適切なキーワードと重みを設定してください。
+
+1.  **ユーザーリクエストに基づくキーワード生成:**
+    - **ユーザーリクエストで特定の地域（市、県など）が言及されている場合（例：'熊本市'、'長崎'）、その地域を中心にキーワードを生成してください。**
+    - 特定の地域への言及がない場合は、基本旅行地域である'{pre_info.region}'を使用してキーワードを生成してください。
+    - 生成されたキーワードには必ず地域名を含める必要があります。
+2.  **雰囲気と予算の反映:** ユーザーの好み('{pre_info.atmosphere}')と予算(1人当たり{pre_info.budget}円)を積極的に反映してキーワードを作成してください。
+3.  **創造性:** ユーザーが思いつかないような創造的なキーワードを1～2個含めてください。
+4.  **必須包含:** チャットから抽出された各キーワード(例: {pre_info.atmosphere})のうち、名詞・形容詞は**少なくとも1回以上**地域名と組み合わせた形でキーワードに含めてください (例: "{pre_info.region} 可愛いカフェ")。
+5.  **形式:** 結果はPythonリスト形式で、各キーワードを引用符で囲んで返してください。例: `["keyword1", "keyword2", ...]`
+
+**ユーザー情報:**
+*   **基本旅行地域:** {pre_info.region}
+*   **1人当たりの予算:** {pre_info.budget}円
+*   **旅行の雰囲気/要望:** {pre_info.atmosphere}
+
+**出力 (キーワード8個):**
 """
         return prompt
 
@@ -537,3 +565,76 @@ class LLMService:
 
         print(f"✅ フォールバック再ランキング完了: {len(selected)}個")
         return selected, adjusted_weights
+
+    async def extract_keywords_from_chat(self, chat_text: str) -> Dict[str, Any]:
+        """
+        Extract keywords and intent from user chat history using LLM.
+        """
+        if not self.model:
+            print(
+                "⚠️ Vertex AI model is not available. Cannot extract keywords from chat."
+            )
+            return {"intent": chat_text, "keywords": []}
+
+        try:
+            prompt = self._create_chat_extraction_prompt(chat_text)
+
+            generation_config = GenerationConfig(
+                temperature=0.5,
+                max_output_tokens=512,
+                response_mime_type="application/json",
+            )
+
+            response = self.model.generate_content(
+                prompt,
+                generation_config=generation_config,
+            )
+
+            result = json.loads(response.text)
+            return result
+
+        except Exception as e:
+            print(f"❌ LLM chat extraction failed: {str(e)}")
+            return {"intent": chat_text, "keywords": []}
+
+    def _create_chat_extraction_prompt(self, chat_text: str) -> str:
+        """Create a prompt for extracting keywords and intent from chat."""
+        prompt = f"""
+以下のユーザーとのチャット履歴を分析し、ユーザーの旅行の好みに関する重要なキーワード、意図、および**新しい地域情報**を抽出してください。
+
+**チャット履歴:**
+"{chat_text}"
+
+**最重要指示:**
+1.  **意図 (intent)**: ユーザーの主要な要求や目的を1-2文で要約してください。
+2.  **キーワード (keywords)**: ユーザーの好みを反映する検索キーワードを5-7個抽出してください。
+3.  **地域 (region)**: ユーザーが新しい地域や都市について言及した場合、その**地名のみ**を抽出してください。言及がない場合は `null` を返してください。**これは非常に重要です。例えば、ユーザーが「淡路島の方で」と言った場合、regionは「淡路島」となります。**
+
+**応答形式 (JSONのみ):**
+{{
+  "intent": "ユーザーの主要な要求の要約",
+  "keywords": ["抽出されたキーワード1", "抽出されたキーワード2", "抽出されたキーワード3"],
+  "region": "言及された新しい地名またはnull"
+}}
+"""
+        return prompt
+
+    async def generate_llm_weights(self, pre_info: PreInfo) -> Dict[str, float]:
+        """키워드와 무관하게 무게(weight) 사전만 반환하는 헬퍼 함수.
+
+        RecommendationService 등에서 별도로 가중치만 필요할 때 사용합니다.
+        내부적으로 generate_keywords_and_weights 를 호출하되, 키워드 결과는 무시합니다.
+        LLM 호출 실패 시 폴백 가중치를 반환합니다.
+        """
+        try:
+            # generate_keywords_and_weights 는 (keywords, weights) 튜플을 반환
+            _, weights = await self.generate_keywords_and_weights(pre_info)
+            return weights
+        except Exception:
+            # 폴백: 균등 가중치
+            return {
+                "price": 0.25,
+                "rating": 0.25,
+                "congestion": 0.25,
+                "similarity": 0.25,
+            }
