@@ -69,8 +69,16 @@ class RouteService:
 
         try:
             # 1. 최신 버전 가져오기
+            # Determine the target version for calculation.
+            # Prefer the latest among existing routes and rec_spot records.
             latest_route = self.route_repository.get_latest_by_plan(request.plan_id)
-            latest_version = latest_route.version if latest_route else 1
+            route_version = latest_route.version if latest_route else 0
+
+            spot_version = (
+                self.rec_spot_repository.get_latest_version(request.plan_id) or 0
+            )
+
+            latest_version = max(route_version, spot_version, 1)
 
             # 2. pre_info 조회 (기본 정보만)
             pre_info = self.pre_info_repository.get_by_plan_id(request.plan_id)

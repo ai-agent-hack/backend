@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import desc, and_, func
 from decimal import Decimal
 
 from app.models.rec_spot import RecSpot, SpotStatus
@@ -186,3 +186,12 @@ class RecSpotRepository:
 
         self.db.commit()
         return updated_count
+
+    def get_latest_version(self, plan_id: str) -> Optional[int]:
+        """Return the highest version number available for the given plan_id."""
+        latest_version = (
+            self.db.query(func.max(RecSpot.version))
+            .filter(RecSpot.plan_id == plan_id)
+            .scalar()
+        )
+        return int(latest_version) if latest_version is not None else None
