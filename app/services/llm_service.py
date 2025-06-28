@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import List, Dict, Any, Tuple
 from google.oauth2 import service_account
@@ -7,6 +8,9 @@ from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 from app.models.pre_info import PreInfo
 from app.core.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class LLMService:
@@ -614,3 +618,23 @@ class LLMService:
 }}
 """
         return prompt
+
+    async def generate_llm_weights(self, pre_info: PreInfo) -> Dict[str, float]:
+        """키워드와 무관하게 무게(weight) 사전만 반환하는 헬퍼 함수.
+
+        RecommendationService 등에서 별도로 가중치만 필요할 때 사용합니다.
+        내부적으로 generate_keywords_and_weights 를 호출하되, 키워드 결과는 무시합니다.
+        LLM 호출 실패 시 폴백 가중치를 반환합니다.
+        """
+        try:
+            # generate_keywords_and_weights 는 (keywords, weights) 튜플을 반환
+            _, weights = await self.generate_keywords_and_weights(pre_info)
+            return weights
+        except Exception:
+            # 폴백: 균등 가중치
+            return {
+                "price": 0.25,
+                "rating": 0.25,
+                "congestion": 0.25,
+                "similarity": 0.25,
+            }
