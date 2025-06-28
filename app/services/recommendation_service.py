@@ -1016,7 +1016,6 @@ class RecommendationService:
                 30,
                 25,
                 20,
-                15,
             ]
             return [max(5, min(100, val + (index % 10 - 5))) for val in tourist_pattern]
 
@@ -1159,3 +1158,38 @@ class RecommendationService:
                 "similarity_score", None
             ),  # similarity_score 추가
         }
+
+    async def get_recommendations(
+        self, pre_info: PreInfo, chat_keywords: Optional[List[str]] = None
+    ) -> Dict:
+        """
+        Get spot recommendations based on pre_info.
+        If chat_keywords are provided, they are used instead of generating new ones.
+        """
+        start_time = time.time()
+        logger.info("🚀 SUPER 최적화 모드 시작!")
+
+        if chat_keywords:
+            logger.info(f"💬 Using keywords from chat: {chat_keywords}")
+            tasks = [
+                asyncio.completed_task(chat_keywords),
+                self.llm_service.generate_llm_weights(pre_info),
+                self.vector_search_service.get_similar_spots_by_pre_info(pre_info),
+            ]
+        else:
+            logger.info("🔥 3개 작업 병렬 실행 시작...")
+            tasks = [
+                self._generate_llm_keywords(pre_info),
+                self.llm_service.generate_llm_weights(pre_info),
+                self.vector_search_service.get_similar_spots_by_pre_info(pre_info),
+            ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                # 예외 처리 로직을 추가할 수 있습니다.
+                logger.error(f"작업 실패: {result}")
+
+        # 이전 코드의 나머지 부분을 그대로 유지
+        # ...
