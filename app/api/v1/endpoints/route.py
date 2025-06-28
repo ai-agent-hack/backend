@@ -12,6 +12,7 @@ from app.schemas.route import (
     RouteStatistics,
     RouteFullDetail,
     RouteWithDays,
+    RouteResponse,
 )
 from app.services.route_service import RouteService
 from app.services.google_maps_service import GoogleMapsService

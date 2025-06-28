@@ -38,24 +38,23 @@ class TSPSolverService:
         optimize_for: str = "distance",  # "distance" or "time"
     ) -> TSPSolution:
         """
-        TSP 문제 해결
-
-        Args:
-            distance_matrix: 거리 매트릭스 딕셔너리
-            num_locations: 전체 위치 수
-            start_index: 시작 지점 인덱스
-            end_index: 종료 지점 인덱스 (None이면 start_index와 동일)
-            optimize_for: 최적화 기준 ("distance" 또는 "time")
-
-        Returns:
-            TSP 해결 결과
+        TSP(Traveling Salesperson Problem) 해결
+        주어진 거리 행렬을 기반으로 최적의 방문 순서를 찾습니다.
+        end_index가 None이면 출발지에서 시작하여 가장 효율적인 순서로 방문하는 개방 경로(open path)를 찾습니다.
         """
         import time
 
         start_time = time.time()
 
+        is_open_path = end_index is None
+        if is_open_path:
+            # For open path, we still calculate a round trip and then cut the last segment.
+            end_index = start_index
+
         try:
-            # OR-Tools 사용 시도
+            # OR-Tools가 설치되어 있으면 사용, 없으면 휴리스틱 사용
+            from ortools.constraint_solver import pywrapcp
+
             solution = self._solve_with_ortools(
                 distance_matrix, num_locations, start_index, end_index, optimize_for
             )
@@ -72,9 +71,21 @@ class TSPSolverService:
                 distance_matrix, num_locations, start_index, end_index, optimize_for
             )
 
-        solve_time = time.time() - start_time
-        solution.solve_time_seconds = solve_time
+        # 개방 경로인 경우, 마지막 노드를 제거하고 경로를 재계산
+        if is_open_path and solution.optimal_order and len(solution.optimal_order) > 1:
+            if solution.optimal_order[0] == solution.optimal_order[-1]:
+                solution.optimal_order = solution.optimal_order[:-1]
 
+                # 경로 변경 후 메트릭 재계산
+                (
+                    solution.total_distance_meters,
+                    solution.total_duration_seconds,
+                    solution.route_segments,
+                ) = self._calculate_route_metrics(
+                    solution.optimal_order, distance_matrix
+                )
+
+        solution.solve_time_seconds = time.time() - start_time
         return solution
 
     def _solve_with_ortools(
@@ -87,29 +98,22 @@ class TSPSolverService:
     ) -> TSPSolution:
         """OR-Tools를 사용한 TSP 해결"""
         try:
-            from ortools.constraint_solver import routing_enums_pb2
-            from ortools.constraint_solver import pywrapcp
+            from ortools.constraint_solver import pywrapcp, routing_enums_pb2
         except ImportError:
             raise ImportError("OR-Tools 패키지가 필요합니다: pip install ortools")
 
-        # 종료 지점이 지정되지 않은 경우 시작 지점과 동일하게 설정
-        if end_index is None:
-            end_index = start_index
-
-        # 거리 매트릭스를 2D 배열로 변환
-        matrix = self._create_matrix_array(distance_matrix, num_locations, optimize_for)
-
-        # TSP 모델 생성 (시작 및 종료 지점 지정)
+        # TSP 모델 생성 (start_index와 end_index를 리스트로 전달)
         manager = pywrapcp.RoutingIndexManager(
             num_locations, 1, [start_index], [end_index]
         )
         routing = pywrapcp.RoutingModel(manager)
 
+        # 비용 콜백 등록
         def distance_callback(from_index, to_index):
-            """거리 콜백 함수"""
             from_node = manager.IndexToNode(from_index)
             to_node = manager.IndexToNode(to_index)
-            return matrix[from_node][to_node]
+            cost = self._get_cost(distance_matrix, from_node, to_node, optimize_for)
+            return int(cost)
 
         transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
@@ -122,7 +126,7 @@ class TSPSolverService:
         search_parameters.local_search_metaheuristic = (
             routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
         )
-        search_parameters.time_limit.seconds = 30  # 30초 제한
+        search_parameters.time_limit.seconds = 5
 
         # TSP 해결
         solution = routing.SolveWithParameters(search_parameters)
@@ -130,8 +134,26 @@ class TSPSolverService:
         if not solution:
             raise Exception("OR-Tools로 해결할 수 없습니다.")
 
-        return self._parse_ortools_solution(
-            solution, manager, routing, distance_matrix, optimize_for
+        # 경로 추출
+        route = []
+        index = routing.Start(0)
+        while not routing.IsEnd(index):
+            node_index = manager.IndexToNode(index)
+            route.append(node_index)
+            index = solution.Value(routing.NextVar(index))
+        route.append(manager.IndexToNode(index))
+
+        # 거리, 시간, 세그먼트 재계산
+        total_distance, total_duration, segments = self._calculate_route_metrics(
+            route, distance_matrix
+        )
+
+        return TSPSolution(
+            optimal_order=route,
+            total_distance_meters=total_distance,
+            total_duration_seconds=total_duration,
+            route_segments=segments,
+            solve_time_seconds=0.0,  # 상위 레벨에서 계산됨
         )
 
     def _solve_with_heuristic(
@@ -355,12 +377,10 @@ class TSPSolverService:
         locations: List[LocationCoordinate],
         distance_matrix_result: List[List[DistanceMatrixResult]],
         days_assignment: Dict[int, List[int]],
-        start_location_index: int,
-        hotel_location_index: Optional[int],
         optimize_for: str = "distance",
     ) -> Dict[int, TSPSolution]:
         """
-        여러 날에 걸친 TSP 문제 해결
+        여러 날에 걸친 TSP 문제 해결 (스팟들만으로 구성)
         """
         solutions = {}
         num_locations = len(locations)
@@ -375,13 +395,8 @@ class TSPSolverService:
             if not spot_indices:
                 continue
 
-            day_start_node = start_location_index if day == 1 else hotel_location_index
-            day_end_node = hotel_location_index
-
-            # 해당 날짜의 로케이션 집합
-            day_locations_indices = {day_start_node} | set(spot_indices)
-            if day_end_node is not None:
-                day_locations_indices.add(day_end_node)
+            # 해당 날짜의 스팟들만으로 TSP 문제 해결
+            day_locations_indices = set(spot_indices)
 
             # 해당 날짜의 로케이션만으로 새로운 매핑과 매트릭스 생성
             sub_location_list = sorted(list(day_locations_indices))
@@ -400,17 +415,15 @@ class TSPSolverService:
                         (r_original, c_original)
                     )
 
-            sub_start_idx = sub_map[day_start_node]
-            sub_end_idx = (
-                sub_map.get(day_end_node) if day_end_node is not None else None
-            )
+            # 첫 번째 스팟을 시작점으로 사용
+            sub_start_idx = 0
 
             try:
                 solution = self.solve_tsp(
                     distance_matrix=sub_dist_matrix_dict,
                     num_locations=len(sub_location_list),
                     start_index=sub_start_idx,
-                    end_index=sub_end_idx,
+                    end_index=None,  # 원형 경로
                     optimize_for=optimize_for,
                 )
 

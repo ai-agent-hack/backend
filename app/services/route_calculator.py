@@ -70,8 +70,6 @@ class RouteCalculator:
                     locations=self.input.locations,
                     distance_matrix_result=cost_matrix_result,
                     days_assignment=daily_spot_indices,
-                    start_location_index=self.input.location_mapping["departure"],
-                    hotel_location_index=self.input.location_mapping.get("hotel"),
                     optimize_for=self.input.optimize_for,
                 )
             )
@@ -85,34 +83,14 @@ class RouteCalculator:
         return self.output
 
     def _assign_spots_to_days(self) -> Dict[int, List[int]]:
-        """total_days에 맞춰 스팟을 균등 분배"""
+        """모든 스팟을 day 1에 할당 (일정 나누기 비활성화)"""
         total_spots = len(self.input.selected_spots)
-        total_days = self.input.total_days
-        if total_spots == 0 or total_days == 0:
+        if total_spots == 0:
             return {}
 
-        spot_location_index_map = {
-            spot.spot_id: i + 1 for i, spot in enumerate(self.input.selected_spots)
-        }
+        spot_location_indices = list(range(total_spots))
 
-        time_slot_map = {"MORNING": 0, "AFTERNOON": 1, "NIGHT": 2}
-        sorted_spots = sorted(
-            self.input.selected_spots, key=lambda s: time_slot_map.get(s.time_slot, 99)
-        )
-
-        sorted_location_indices = [
-            spot_location_index_map[spot.spot_id] for spot in sorted_spots
-        ]
-
-        spots_per_day = (total_spots + total_days - 1) // total_days
-        daily_spot_indices = {}
-        for day in range(1, total_days + 1):
-            start = (day - 1) * spots_per_day
-            end = start + spots_per_day
-            if start < total_spots:
-                daily_spot_indices[day] = sorted_location_indices[start:end]
-
-        return daily_spot_indices
+        return {1: spot_location_indices}
 
     async def _build_cost_matrix(self) -> Optional[List[List[DistanceMatrixResult]]]:
         """Google Maps API를 호출하여 비용 행렬 생성"""

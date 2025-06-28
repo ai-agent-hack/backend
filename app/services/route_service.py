@@ -100,9 +100,7 @@ class RouteService:
             if not spots_data["selected_spots"]:
                 raise ValueError("선택된 스팟이 없습니다.")
 
-            locations, location_mapping = self._create_location_coordinates(
-                spots_data, departure_location, hotel_location
-            )
+            locations, location_mapping = self._create_location_coordinates(spots_data)
 
             calculation_input = RouteCalculationInput(
                 plan_id=request.plan_id,
@@ -133,6 +131,7 @@ class RouteService:
                 calculation_output,
                 detailed_routes,
                 locations,
+                latest_version,
             )
 
             calculation_time = time.time() - start_time
@@ -176,22 +175,14 @@ class RouteService:
         }
 
     def _create_location_coordinates(
-        self,
-        spots_data: Dict[str, Any],
-        departure_location: str,
-        hotel_location: Optional[str],
+        self, spots_data: Dict[str, Any]
     ) -> Tuple[List[LocationCoordinate], Dict[str, int]]:
-        """2️⃣ 座標変換"""
+        """스팟들만으로 좌표 리스트 생성"""
         locations = []
         location_mapping = {}
 
-        # 출발지 추가
-        departure_coord = self._parse_location_string(departure_location)
-        locations.append(departure_coord)
-        location_mapping["departure"] = 0
-
-        # 스팟들 추가
-        for spot in spots_data["selected_spots"]:
+        # 스팟들만 추가 (출발지/호텔 개념 제거)
+        for i, spot in enumerate(spots_data["selected_spots"]):
             if spot.latitude and spot.longitude:
                 coord = LocationCoordinate(
                     latitude=float(spot.latitude),
@@ -199,15 +190,7 @@ class RouteService:
                     name=spot.spot_name,
                 )
                 locations.append(coord)
-                location_mapping[f"spot_{spot.id}"] = len(locations) - 1
-
-        # 호텔 추가 (출발지와 다른 경우)
-        if hotel_location and hotel_location != departure_location:
-            hotel_coord = self._parse_location_string(hotel_location)
-            locations.append(hotel_coord)
-            location_mapping["hotel"] = len(locations) - 1
-        else:
-            location_mapping["hotel"] = location_mapping["departure"]
+                location_mapping[f"spot_{spot.id}"] = i
 
         return locations, location_mapping
 
@@ -221,10 +204,8 @@ class RouteService:
         if total_spots == 0 or total_days == 0:
             return {}
 
-        # 스팟의 위치 인덱스(locations 리스트 기준)를 매핑. 스팟은 1부터 시작.
-        spot_location_index_map = {
-            spot.id: i + 1 for i, spot in enumerate(selected_spots)
-        }
+        # 스팟의 위치 인덱스(locations 리스트 기준)를 매핑. 스팟은 0부터 시작.
+        spot_location_index_map = {spot.id: i for i, spot in enumerate(selected_spots)}
 
         # 시간대 순서로 스팟 정렬
         time_slot_map = {"MORNING": 0, "AFTERNOON": 1, "NIGHT": 2}
@@ -264,6 +245,16 @@ class RouteService:
             # 해당 일차의 LocationCoordinate 리스트 생성
             day_locations = [locations[idx] for idx in solution.optimal_order]
 
+            # Unique한 location이 2개 미만인 경우 Directions API 호출을 건너뜀
+            unique_locations = {(loc.latitude, loc.longitude) for loc in day_locations}
+            if len(unique_locations) < 2:
+                detailed_routes[day] = {
+                    "directions": None,
+                    "locations": day_locations,
+                    "segments": self._create_route_segments(solution, locations),
+                }
+                continue
+
             try:
                 # Google Maps Directions API 호출
                 directions = await self.google_maps_service.get_directions(
@@ -298,6 +289,7 @@ class RouteService:
         calc_output: RouteCalculationOutput,
         detailed_routes: Dict[int, Dict[str, Any]],
         locations: List[LocationCoordinate],
+        latest_version: int,
     ) -> Any:  # Route model
         """7️⃣ 데이터베이스 저장"""
 
@@ -307,10 +299,8 @@ class RouteService:
         # Route 데이터 준비
         route_data = {
             "plan_id": request.plan_id,
-            "version": request.version,
+            "version": latest_version,
             "total_days": spots_data["total_days"],
-            "departure_location": request.departure_location,
-            "hotel_location": request.hotel_location,
             "total_distance_km": Decimal(
                 str(round(calc_output.total_distance_meters / 1000, 2))
             ),

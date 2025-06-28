@@ -259,5 +259,6 @@ class NavigationResponse(BaseModel):
     content: Optional[str] = None  # GPX format用
     error_message: Optional[str] = None
 
+
 class RouteResponse(BaseModel):
     coordinates: Optional[List[List[float]]] = None  # [[lat, lng], [lat, lng], ...]
