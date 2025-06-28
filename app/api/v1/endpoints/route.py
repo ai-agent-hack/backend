@@ -67,7 +67,7 @@ async def calculate_route(
         )
 
 
-@router.post("/calculate-detailed", response_model=RouteFullDetail)
+@router.post("/calculate-detailed")
 async def calculate_route_with_details(
     request: RouteCalculationRequest,
     route_service: RouteService = Depends(get_route_service),
@@ -110,7 +110,8 @@ async def calculate_route_with_details(
                 detail="Route details not found after calculation",
             )
 
-        return route_full_details
+        # 딕셔너리에서 RouteFullDetail 모델로 안전하게 변환
+        return RouteFullDetail(**route_full_details)
 
     except HTTPException:
         raise
