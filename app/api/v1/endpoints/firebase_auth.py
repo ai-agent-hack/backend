@@ -22,6 +22,7 @@ router = APIRouter()
 
 @router.post("/signup", response_model=User, status_code=status.HTTP_201_CREATED)
 async def firebase_signup(
+    request: Request,
     firebase_user_create: FirebaseUserCreate,
     user_service: UserService = Depends(get_user_service),
 ) -> Any:
@@ -31,6 +32,7 @@ async def firebase_signup(
     Firebaseで既に認証されたユーザーをデータベースに登録します。
 
     Args:
+        request: FastAPI request object
         firebase_user_create: Firebaseユーザー作成データ
         user_service: ユーザーサービス依存性
 
@@ -42,6 +44,10 @@ async def firebase_signup(
     """
     try:
         user = await user_service.create_firebase_user(firebase_user_create)
+
+        # Auto-login: store user_id in session so subsequent API calls are authenticated
+        request.session["user_id"] = user.id
+
         return user
     except InvalidCredentialsError:
         raise HTTPException(
@@ -92,7 +98,9 @@ async def firebase_session_login(
     # セッションにユーザーID保存
     request.session["user_id"] = current_user.id
     return SessionLoginResponse(
-        message="セッションログインが完了しました", user=current_user, session_created=True
+        message="セッションログインが完了しました",
+        user=current_user,
+        session_created=True,
     )
 
 
