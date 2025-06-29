@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status, Header, Request
 from sqlalchemy.orm import Session
 from typing import Optional
+import os
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -9,6 +10,11 @@ from app.repositories.user import UserRepository
 from app.repositories.pre_info import PreInfoRepository
 from app.repositories.rec_plan import RecPlanRepository
 from app.repositories.rec_spot import RecSpotRepository
+from app.repositories.route import (
+    RouteRepository,
+    RouteDayRepository,
+    RouteSegmentRepository,
+)
 from app.services.user import UserService
 from app.services.pre_info import PreInfoService
 from app.services.recommendation_service import RecommendationService
@@ -18,6 +24,9 @@ from app.services.rec_spot import RecSpotService
 from app.services.trip_refine import TripRefineService
 from app.models.user import User
 from app.core.exceptions import UserNotFoundError
+from app.services.route_service import RouteService
+from app.services.google_maps_service import GoogleMapsService
+from app.services.tsp_solver_service import TSPSolverService
 
 
 def get_user_repository(db: Session = Depends(get_db)) -> UserRepository:
@@ -324,7 +333,7 @@ async def get_current_user_test(
 
     # テスト用ハードコーディングされたユーザー（最初のユーザー）
     try:
-        # 既存のユーザーを取得（user_service를 통해）
+        # 既存のユーザーを取得（user_serviceを통해）
         users = user_service.get_users(skip=0, limit=1, active_only=True)
         if users:
             return users[0]
@@ -344,3 +353,53 @@ async def get_current_user_test(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get test user: {str(e)}",
         )
+
+
+def get_route_repository(db: Session = Depends(get_db)) -> RouteRepository:
+    return RouteRepository(db)
+
+
+def get_route_day_repository(db: Session = Depends(get_db)) -> RouteDayRepository:
+    return RouteDayRepository(db)
+
+
+def get_route_segment_repository(
+    db: Session = Depends(get_db),
+) -> RouteSegmentRepository:
+    return RouteSegmentRepository(db)
+
+
+# Services
+def get_google_maps_service() -> GoogleMapsService:
+    api_key = os.getenv("GOOGLE_MAP_API_KEY")
+    if not api_key:
+        raise ValueError("Google Maps API key is not configured.")
+    return GoogleMapsService(api_key=api_key)
+
+
+def get_tsp_solver_service() -> TSPSolverService:
+    return TSPSolverService()
+
+
+def get_route_service(
+    route_repository: RouteRepository = Depends(get_route_repository),
+    route_day_repository: RouteDayRepository = Depends(get_route_day_repository),
+    route_segment_repository: RouteSegmentRepository = Depends(
+        get_route_segment_repository
+    ),
+    rec_spot_repository: RecSpotRepository = Depends(get_rec_spot_repository),
+    rec_plan_repository: RecPlanRepository = Depends(get_rec_plan_repository),
+    pre_info_repository: PreInfoRepository = Depends(get_pre_info_repository),
+    google_maps_service: GoogleMapsService = Depends(get_google_maps_service),
+    tsp_solver_service: TSPSolverService = Depends(get_tsp_solver_service),
+) -> RouteService:
+    return RouteService(
+        route_repository=route_repository,
+        route_day_repository=route_day_repository,
+        route_segment_repository=route_segment_repository,
+        rec_spot_repository=rec_spot_repository,
+        rec_plan_repository=rec_plan_repository,
+        pre_info_repository=pre_info_repository,
+        google_maps_service=google_maps_service,
+        tsp_solver_service=tsp_solver_service,
+    )

@@ -350,7 +350,6 @@ class RouteService:
                         if day_route.get("directions")
                         else None
                     ),
-                    "bounds": None,  # 필요시 추가
                 },
                 "segments": self._create_segments_data_with_directions(
                     day_route.get("segments", []),
