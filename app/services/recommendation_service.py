@@ -1119,6 +1119,133 @@ class RecommendationService:
             # 기타 장소: 기본 패턴에 약간의 변화
             return [max(5, min(100, val + (index % 12 - 6))) for val in base_congestion]
 
+    def _generate_recommendation_reason(self, place_data: Dict[str, Any]) -> str:
+        """場所の詳細情報に基づいて場所の説明を生成"""
+        types = place_data.get("types", [])
+        rating = place_data.get("rating", 0.0)
+        ratings_total = place_data.get("ratings_total", 0)
+        price_level = place_data.get("price_level", 0)
+        opening_hours = place_data.get("opening_hours", {})
+        address = place_data.get("address", "")
+        
+        # 場所の説明部分を構築
+        description_parts = []
+        
+        # 場所のタイプに基づく説明
+        type_descriptions = {
+            "restaurant": "レストラン",
+            "cafe": "カフェ",
+            "museum": "博物館",
+            "park": "公園",
+            "temple": "寺院",
+            "shrine": "神社",
+            "shopping_mall": "ショッピングモール",
+            "tourist_attraction": "観光スポット",
+            "amusement_park": "遊園地",
+            "art_gallery": "美術館",
+            "aquarium": "水族館",
+            "zoo": "動物園",
+            "spa": "スパ",
+            "night_club": "ナイトクラブ",
+            "bar": "バー",
+            "bakery": "ベーカリー",
+            "book_store": "書店",
+            "clothing_store": "衣料品店",
+            "department_store": "デパート",
+            "electronics_store": "電器店",
+            "gym": "ジム",
+            "hair_care": "美容院",
+            "hospital": "病院",
+            "library": "図書館",
+            "movie_theater": "映画館",
+            "pharmacy": "薬局",
+            "school": "学校",
+            "supermarket": "スーパーマーケット",
+            "train_station": "駅",
+            "subway_station": "地下鉄駅"
+        }
+        
+        # メインのタイプを特定
+        main_type = None
+        for place_type in types:
+            if place_type in type_descriptions:
+                main_type = type_descriptions[place_type]
+                break
+        
+        if main_type:
+            description_parts.append(main_type)
+        
+        # 価格帯の情報（レストランやカフェなどの場合）
+        if price_level > 0 and main_type in ["レストラン", "カフェ", "バー"]:
+            price_descriptions = {
+                1: "リーズナブルな価格帯",
+                2: "手頃な価格帯",
+                3: "やや高級",
+                4: "高級"
+            }
+            if price_level in price_descriptions:
+                description_parts.append(price_descriptions[price_level])
+        
+        # 評価とレビュー数の情報
+        if rating > 0 and ratings_total > 0:
+            if ratings_total >= 1000:
+                description_parts.append(f"評価{rating:.1f}（{ratings_total}件以上のレビュー）")
+            elif ratings_total >= 100:
+                description_parts.append(f"評価{rating:.1f}（{ratings_total}件のレビュー）")
+            else:
+                description_parts.append(f"評価{rating:.1f}")
+        
+        # 営業時間の情報
+        if opening_hours:
+            if opening_hours.get("open_now") is True:
+                description_parts.append("現在営業中")
+            elif opening_hours.get("open_now") is False:
+                description_parts.append("現在営業時間外")
+            
+            # 営業時間の詳細（あれば）
+            weekday_text = opening_hours.get("weekday_text", [])
+            if weekday_text and len(weekday_text) > 0:
+                # 今日の営業時間を抽出（最初の1行目）
+                today_hours = weekday_text[0] if isinstance(weekday_text[0], str) else ""
+                if "24 時間営業" in today_hours or "24時間" in today_hours:
+                    description_parts.append("24時間営業")
+        
+        # エリア情報（住所から抽出）
+        if address:
+            # 日本の住所から区・市を抽出
+            import re
+            area_match = re.search(r'([^都道府県]+[市区町村])', address)
+            if area_match:
+                area = area_match.group(1)
+                description_parts.append(f"{area}エリア")
+        
+        # 特殊な施設タイプの追加情報
+        special_features = []
+        for place_type in types:
+            if place_type == "point_of_interest":
+                special_features.append("名所")
+            elif place_type == "natural_feature":
+                special_features.append("自然スポット")
+            elif place_type == "establishment":
+                continue  # 一般的すぎるので無視
+            elif place_type == "food" and main_type not in ["レストラン", "カフェ"]:
+                special_features.append("飲食店")
+        
+        if special_features:
+            description_parts.extend(special_features[:2])  # 最大2つまで
+        
+        # 文章を組み立て
+        if description_parts:
+            # 最初の要素（場所のタイプ）を除いて、残りを「、」で結合
+            if len(description_parts) == 1:
+                return description_parts[0] + "です。"
+            else:
+                main_desc = description_parts[0]
+                sub_desc = "、".join(description_parts[1:])
+                return f"{main_desc}です。{sub_desc}。"
+        else:
+            return "詳細情報は取得できませんでした。"
+
     def _convert_to_spot_schema_fast(
         self, place_data: Dict[str, Any], index: int
     ) -> Dict[str, Any]:
@@ -1134,7 +1261,7 @@ class RecommendationService:
             "spot_id": place_data.get("place_id", f"spot_{index}"),
             "longitude": lng,
             "latitude": lat,
-            "recommendation_reason": f"{place_data.get('name', '場所')}は評価 {place_data.get('rating', 4.0):.1f}でおすすめです。",
+            "recommendation_reason": self._generate_recommendation_reason(place_data),
             "details": {
                 "name": place_data.get("name", f"장소_{index}"),
                 "congestion": self._generate_realistic_congestion(
