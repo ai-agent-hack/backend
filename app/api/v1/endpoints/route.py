@@ -39,6 +39,7 @@ def get_route_service(db: Session = Depends(get_db)) -> RouteService:
         rec_spot_repository=RecSpotRepository(db),
         rec_plan_repository=RecPlanRepository(db),
         pre_info_repository=PreInfoRepository(db),
+        rec_plan_repository=RecPlanRepository(db),
         google_maps_service=GoogleMapsService(),
         tsp_solver_service=TSPSolverService(),
     )
