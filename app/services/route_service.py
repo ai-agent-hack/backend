@@ -9,6 +9,7 @@ from app.repositories.route import (
     RouteSegmentRepository,
 )
 from app.repositories.rec_spot import RecSpotRepository
+from app.repositories.rec_plan import RecPlanRepository
 from app.repositories.pre_info import PreInfoRepository
 from app.services.google_maps_service import (
     GoogleMapsService,
@@ -46,6 +47,7 @@ class RouteService:
         route_day_repository: RouteDayRepository,
         route_segment_repository: RouteSegmentRepository,
         rec_spot_repository: RecSpotRepository,
+        rec_plan_repository: RecPlanRepository,
         pre_info_repository: PreInfoRepository,
         google_maps_service: GoogleMapsService,
         tsp_solver_service: TSPSolverService,
@@ -54,6 +56,7 @@ class RouteService:
         self.route_day_repository = route_day_repository
         self.route_segment_repository = route_segment_repository
         self.rec_spot_repository = rec_spot_repository
+        self.rec_plan_repository = rec_plan_repository
         self.pre_info_repository = pre_info_repository
         self.google_maps_service = google_maps_service
         self.tsp_solver_service = tsp_solver_service
@@ -68,9 +71,9 @@ class RouteService:
         start_time = time.time()
 
         try:
-            # 1. 최신 버전 가져오기
-            latest_route = self.route_repository.get_latest_by_plan(request.plan_id)
-            latest_version = latest_route.version if latest_route else 1
+            # 1. 최신 plan 버전 가져오기 (선택된 스팟이 있는 버전)
+            latest_plan = self.rec_plan_repository.get_latest_version(request.plan_id)
+            latest_version = latest_plan.version if latest_plan else 1
 
             # 2. pre_info에서 출발지와 호텔 정보 가져오기
             pre_info = self.pre_info_repository.get_by_plan_id(request.plan_id)
