@@ -138,6 +138,10 @@ class GoogleMapsService:
         if not self.api_key:
             raise ValueError("Google Maps API 키가 필요합니다.")
 
+        # waypoints가 단일 객체일 경우 리스트로 변환
+        if waypoints and not isinstance(waypoints, list):
+            waypoints = [waypoints]
+
         params = {
             "origin": origin.to_string(),
             "destination": destination.to_string(),
