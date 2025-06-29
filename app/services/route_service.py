@@ -657,53 +657,78 @@ class RouteService:
         if not route:
             return None
 
-        # 기본 route 정보 생성
-        route_details = await self.get_route_details(plan_id, version)
+        # RouteFullDetail 스키마와 동일한 구조로 딕셔너리 생성
+        route_days_with_segments = []
+        for day in route.route_days:
+            segments = [
+                {
+                    "id": seg.id,
+                    "route_day_id": seg.route_day_id,
+                    "segment_order": seg.segment_order,
+                    "from_location": seg.from_location,
+                    "to_spot_id": seg.to_spot_id,
+                    "to_spot_name": seg.to_spot_name,
+                    "travel_mode": seg.travel_mode,
+                    "distance_meters": seg.distance_meters,
+                    "duration_seconds": seg.duration_seconds,
+                    "directions_steps": seg.directions_steps,
+                }
+                for seg in day.route_segments
+            ]
+            route_days_with_segments.append(
+                {
+                    "id": day.id,
+                    "route_id": day.route_id,
+                    "day_number": day.day_number,
+                    "start_location": day.start_location,
+                    "end_location": day.end_location,
+                    "ordered_spots": day.ordered_spots,
+                    "day_distance_km": (
+                        float(day.day_distance_km) if day.day_distance_km else 0
+                    ),
+                    "day_duration_minutes": day.day_duration_minutes,
+                    "route_geometry": day.route_geometry,
+                    "route_segments": segments,
+                }
+            )
 
-        # 추가 상세 정보 생성
-        route_summary = {
-            "route_id": route.id,
+        full_details = {
+            "id": route.id,
             "plan_id": route.plan_id,
             "version": route.version,
             "total_days": route.total_days,
-            "departure_location": route.departure_location,
-            "hotel_location": route.hotel_location,
+            # "departure_location": route.departure_location,
+            # "hotel_location": route.hotel_location,
+            "total_distance_km": (
+                float(route.total_distance_km)
+                if route.total_distance_km is not None
+                else 0
+            ),
+            "total_duration_minutes": route.total_duration_minutes,
+            "total_spots_count": route.total_spots_count,
             "calculated_at": (
                 route.calculated_at.isoformat() if route.calculated_at else None
             ),
-        }
-
-        daily_summary = []
-        for route_day in route.route_days:
-            # ordered_spots에서 실제 스팟 개수 계산
-            ordered_spots = route_day.ordered_spots or {}
-            spots_count = len(ordered_spots.get("spots", []))
-
-            day_info = {
-                "day_number": route_day.day_number,
-                "spots_count": spots_count,
-                "distance_km": (
-                    float(route_day.day_distance_km) if route_day.day_distance_km else 0
-                ),
-                "duration_minutes": route_day.day_duration_minutes or 0,
-                "start_location": route_day.start_location,
-                "end_location": route_day.end_location,
-            }
-            daily_summary.append(day_info)
-
-        optimization_details = {
-            "total_days": route.total_days,
-            "total_locations_processed": route.total_spots_count or 0,
-            "google_maps_data_available": route.google_maps_data is not None,
-            "calculation_method": "TSP_optimization",
-        }
-
-        # RouteFullDetail 형태로 결합
-        full_details = {
-            **route_details,
-            "route_summary": route_summary,
-            "daily_summary": daily_summary,
-            "optimization_details": optimization_details,
+            "google_maps_data": route.google_maps_data,
+            "route_days": route_days_with_segments,
+            "route_summary": {
+                "route_id": route.id,
+                "plan_id": route.plan_id,
+                "version": route.version,
+            },
+            "daily_summary": [
+                {
+                    "day_number": day.day_number,
+                    "spots_count": len(day.ordered_spots.get("spots", [])),
+                    "distance_km": (
+                        float(day.day_distance_km) if day.day_distance_km else 0
+                    ),
+                }
+                for day in route.route_days
+            ],
+            "optimization_details": {
+                "total_days": route.total_days,
+            },
             "calculation_time_seconds": calculation_time_seconds,
             "created_by_calculation": calculation_time_seconds is not None,
         }
