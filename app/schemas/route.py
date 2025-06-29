@@ -13,6 +13,8 @@ class RouteBase(BaseModel):
     plan_id: str = Field(..., max_length=50)
     version: int = Field(..., ge=1)
     total_days: int = Field(..., ge=1)
+    departure_location: Optional[str] = Field(None, max_length=200)
+    hotel_location: Optional[str] = Field(None, max_length=200)
 
 
 class RouteCreate(RouteBase):
@@ -28,6 +30,8 @@ class RouteUpdate(BaseModel):
     """Route更新スキーマ"""
 
     total_days: Optional[int] = Field(None, ge=1)
+    departure_location: Optional[str] = Field(None, max_length=200)
+    hotel_location: Optional[str] = Field(None, max_length=200)
     total_distance_km: Optional[Decimal] = None
     total_duration_minutes: Optional[int] = None
     total_spots_count: Optional[int] = None
@@ -223,7 +227,38 @@ class RouteStatistics(BaseModel):
     total_days: Optional[int] = None
 
 
-class RouteResponse(BaseModel):
-    """간단한 좌표 응답 스키마"""
+# === Navigation Schemas ===
 
+
+class NavigationStep(BaseModel):
+    """ナビゲーションステップスキーマ"""
+
+    instruction: str
+    distance_meters: int
+    duration_seconds: int
+    polyline: Optional[str] = None
+
+
+class RouteNavigation(BaseModel):
+    """ナビゲーション情報スキーマ"""
+
+    route_id: int
+    plan_id: str
+    version: int
+    total_distance_km: float
+    total_duration_minutes: int
+    days: List[Dict[str, Any]]
+
+
+class NavigationResponse(BaseModel):
+    """ナビゲーション応答スキーマ"""
+
+    success: bool
+    route_navigation: Optional[RouteNavigation] = None
+    format: str = "json"
+    content: Optional[str] = None  # GPX format用
+    error_message: Optional[str] = None
+
+
+class RouteResponse(BaseModel):
     coordinates: Optional[List[List[float]]] = None  # [[lat, lng], [lat, lng], ...]
