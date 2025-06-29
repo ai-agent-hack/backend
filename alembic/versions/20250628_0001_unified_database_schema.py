@@ -1,7 +1,7 @@
 """Unified database schema - all tables with final structure
 
 Revision ID: 20250628_0001
-Revises:
+Revises: 20250628_0000
 Create Date: 2025-06-28 00:01:00.000000
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "20250628_0001"
-down_revision = None
+down_revision = "20250628_0000"
 branch_labels = None
 depends_on = None
 

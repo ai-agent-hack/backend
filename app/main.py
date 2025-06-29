@@ -31,6 +31,8 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SESSION_SECRET_KEY,
     max_age=settings.SESSION_MAX_AGE,
+    same_site="none",  # allow cross-site requests (required for Cloud Run + separate frontend domain)
+    https_only=True,  # ensures cookie is only sent over HTTPS
 )
 
 # Add CORS middleware
