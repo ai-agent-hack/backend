@@ -32,10 +32,6 @@ class Route(Base):
 
     # 여행 기본 정보
     total_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    departure_location: Mapped[Optional[str]] = mapped_column(
-        String(200), nullable=True
-    )
-    hotel_location: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     # 전체 경로 요약
     total_distance_km: Mapped[Optional[Decimal]] = mapped_column(
@@ -118,8 +114,6 @@ class Route(Base):
             "plan_id": self.plan_id,
             "version": self.version,
             "total_days": self.total_days,
-            "departure_location": self.departure_location,
-            "hotel_location": self.hotel_location,
             "total_distance_km": (
                 float(self.total_distance_km) if self.total_distance_km else None
             ),
