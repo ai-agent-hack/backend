@@ -34,7 +34,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:8000",
         "http://localhost:8080",
-        "https://frontend-service-900145575342.asia-northeast1.run.app",
+        "https://vibe-planning-service-900145575342.asia-northeast1.run.app",
     ]
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
