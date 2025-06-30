@@ -114,7 +114,7 @@ async def benchmark_grpc_vs_rest():
     # gRPC 성능 측정
     start_time = time.time()
     for instance in test_instances:
-        await grpc_service.predict_with_grpc("gemini-2.0-flash", [instance])
+        await grpc_service.predict_with_grpc("gemini-2.5-flash", [instance])
     grpc_time = time.time() - start_time
 
     # REST 성능 측정 (비교용)
@@ -139,7 +139,7 @@ async def example_usage():
     try:
         # 단일 예측
         response = await service.predict_with_grpc(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-flash",
             instances=[{"content": {"parts": [{"text": "Explain quantum computing"}]}}],
             parameters={"temperature": 0.7, "maxOutputTokens": 1024},
         )

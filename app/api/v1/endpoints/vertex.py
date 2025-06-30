@@ -67,7 +67,7 @@ async def generate_text() -> Any:
         else:
             vertexai.init(project=project_id, location="us-central1")
 
-        model = GenerativeModel("gemini-2.0-flash")
+        model = GenerativeModel("gemini-2.5-flash")
 
         generation_config = GenerationConfig(
             temperature=0.4,
