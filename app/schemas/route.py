@@ -183,6 +183,9 @@ class RouteCalculationRequest(BaseModel):
     plan_id: str
     travel_mode: str = Field("TRANSIT", max_length=20)
     optimize_for: str = Field("distance", description="distance or time")
+    maintain_time_order: bool = Field(
+        True, description="시간대 순서를 무조건 유지할지 여부 (오전 -> 오후 -> 저녁)"
+    )
 
 
 class RouteCalculationResponse(BaseModel):

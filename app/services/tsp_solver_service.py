@@ -378,63 +378,179 @@ class TSPSolverService:
         distance_matrix_result: List[List[DistanceMatrixResult]],
         days_assignment: Dict[int, List[int]],
         optimize_for: str = "distance",
+        maintain_time_order: bool = False,
+        time_slot_groups: Optional[Dict[str, List[int]]] = None,
     ) -> Dict[int, TSPSolution]:
         """
-        여러 날에 걸친 TSP 문제 해결 (스팟들만으로 구성)
+        다중 일차 TSP 문제 해결
+        maintain_time_order가 True이면 시간대별 그룹 내에서 TSP 최적화 수행
         """
         solutions = {}
-        num_locations = len(locations)
-
-        # 전체 로케이션에 대한 거리/시간을 담는 딕셔너리 생성
-        dist_matrix_dict = {}
-        for i in range(num_locations):
-            for j in range(num_locations):
-                dist_matrix_dict[(i, j)] = distance_matrix_result[i][j]
 
         for day, spot_indices in days_assignment.items():
-            if not spot_indices:
+            if len(spot_indices) <= 1:
+                # 스팟이 1개 이하인 경우
+                solution = TSPSolution(
+                    optimal_order=spot_indices,
+                    total_distance_meters=0,
+                    total_duration_seconds=0,
+                    route_segments=[],
+                    solve_time_seconds=0.0,
+                )
+                solutions[day] = solution
                 continue
 
-            # 해당 날짜의 스팟들만으로 TSP 문제 해결
-            day_locations_indices = set(spot_indices)
+            if maintain_time_order and time_slot_groups:
+                # 시간대별 그룹 내 TSP 최적화 모드
+                logger.info(f"Day {day}: 시간대별 그룹 내 TSP 최적화 모드")
 
-            # 해당 날짜의 로케이션만으로 새로운 매핑과 매트릭스 생성
-            sub_location_list = sorted(list(day_locations_indices))
-            if not sub_location_list:
-                continue
+                optimized_order = []
+                total_distance = 0
+                total_duration = 0
+                all_segments = []
 
-            sub_map = {
-                original_idx: new_idx
-                for new_idx, original_idx in enumerate(sub_location_list)
-            }
-            sub_dist_matrix_dict = {}
+                # 시간대 순서대로 처리 (오전 -> 오후 -> 저녁)
+                for time_slot in ["MORNING", "AFTERNOON", "NIGHT"]:
+                    if time_slot not in time_slot_groups:
+                        continue
 
-            for r_idx, r_original in enumerate(sub_location_list):
-                for c_idx, c_original in enumerate(sub_location_list):
-                    sub_dist_matrix_dict[(r_idx, c_idx)] = dist_matrix_dict.get(
-                        (r_original, c_original)
+                    group_indices = time_slot_groups[time_slot]
+                    if len(group_indices) == 0:
+                        continue
+                    elif len(group_indices) == 1:
+                        # 그룹에 스팟이 1개면 그대로 추가
+                        optimized_order.extend(group_indices)
+                        continue
+
+                    logger.info(
+                        f"  {time_slot} 그룹: {len(group_indices)}개 스팟 TSP 최적화"
                     )
 
-            # 첫 번째 스팟을 시작점으로 사용
-            sub_start_idx = 0
+                    # 그룹 내 상대 인덱스로 매핑 (0, 1, 2, ...)
+                    group_size = len(group_indices)
+                    relative_distance_matrix = {}
+
+                    for i in range(group_size):
+                        for j in range(group_size):
+                            actual_i = group_indices[i]
+                            actual_j = group_indices[j]
+
+                            if actual_i < len(
+                                distance_matrix_result
+                            ) and actual_j < len(distance_matrix_result[actual_i]):
+                                # 상대 인덱스 (i, j)로 저장
+                                relative_distance_matrix[(i, j)] = (
+                                    distance_matrix_result[actual_i][actual_j]
+                                )
+
+                    if not relative_distance_matrix:
+                        # 거리 행렬이 없으면 순서 그대로 사용
+                        optimized_order.extend(group_indices)
+                        continue
+
+                    try:
+                        # 그룹 내 TSP 최적화 (상대 인덱스 사용)
+                        group_solution = self.solve_tsp(
+                            distance_matrix=relative_distance_matrix,
+                            num_locations=group_size,
+                            start_index=0,  # 그룹 내에서는 항상 0부터 시작
+                            end_index=None,  # 개방 경로
+                            optimize_for=optimize_for,
+                        )
+
+                        # 상대 인덱스를 실제 인덱스로 변환
+                        actual_optimized_order = [
+                            group_indices[i] for i in group_solution.optimal_order
+                        ]
+                        optimized_order.extend(actual_optimized_order)
+
+                        total_distance += group_solution.total_distance_meters
+                        total_duration += group_solution.total_duration_seconds
+
+                        # 세그먼트도 실제 인덱스로 변환
+                        for from_rel, to_rel in group_solution.route_segments:
+                            actual_from = group_indices[from_rel]
+                            actual_to = group_indices[to_rel]
+                            all_segments.append((actual_from, actual_to))
+
+                        logger.info(
+                            f"    {time_slot} 그룹 TSP 완료: {len(actual_optimized_order)}개 스팟"
+                        )
+
+                    except Exception as e:
+                        logger.warning(
+                            f"    {time_slot} 그룹 TSP 실패, 기본 순서 사용: {e}"
+                        )
+                        optimized_order.extend(group_indices)
+
+                # 그룹 간 연결 거리/시간 추가 계산
+                if len(optimized_order) > 1:
+                    for i in range(len(optimized_order) - 1):
+                        from_idx = optimized_order[i]
+                        to_idx = optimized_order[i + 1]
+
+                        # 이미 그룹 내 세그먼트로 처리된 것은 스킵
+                        if (from_idx, to_idx) not in all_segments:
+                            if from_idx < len(distance_matrix_result) and to_idx < len(
+                                distance_matrix_result[from_idx]
+                            ):
+                                dist_result = distance_matrix_result[from_idx][to_idx]
+                                total_distance += dist_result.distance_meters
+                                total_duration += dist_result.duration_seconds
+                                all_segments.append((from_idx, to_idx))
+
+                solution = TSPSolution(
+                    optimal_order=optimized_order,
+                    total_distance_meters=total_distance,
+                    total_duration_seconds=total_duration,
+                    route_segments=all_segments,
+                    solve_time_seconds=0.0,
+                )
+                solutions[day] = solution
+                continue
+
+            # 기존 TSP 최적화 로직 (maintain_time_order=False 또는 time_slot_groups 없음)
+            distance_matrix = {}
+            for i in spot_indices:
+                for j in spot_indices:
+                    if i < len(distance_matrix_result) and j < len(
+                        distance_matrix_result[i]
+                    ):
+                        distance_matrix[(i, j)] = distance_matrix_result[i][j]
+
+            if not distance_matrix:
+                # 거리 행렬이 없는 경우 기본값 사용
+                solution = TSPSolution(
+                    optimal_order=spot_indices,
+                    total_distance_meters=0,
+                    total_duration_seconds=0,
+                    route_segments=[],
+                    solve_time_seconds=0.0,
+                )
+                solutions[day] = solution
+                continue
 
             try:
                 solution = self.solve_tsp(
-                    distance_matrix=sub_dist_matrix_dict,
-                    num_locations=len(sub_location_list),
-                    start_index=sub_start_idx,
-                    end_index=None,  # 원형 경로
+                    distance_matrix=distance_matrix,
+                    num_locations=len(spot_indices),
+                    start_index=spot_indices[0],
+                    end_index=None,  # 개방 경로
                     optimize_for=optimize_for,
                 )
-
-                # 원래 인덱스로 복원
-                original_order = [sub_location_list[i] for i in solution.optimal_order]
-                solution.optimal_order = original_order
-
                 solutions[day] = solution
 
             except Exception as e:
-                logger.error(f"{day}일차 TSP 해결 실패: {e}")
+                logger.error(f"Day {day} TSP 해결 실패: {e}")
+                # 실패 시 순서 그대로 사용
+                solution = TSPSolution(
+                    optimal_order=spot_indices,
+                    total_distance_meters=0,
+                    total_duration_seconds=0,
+                    route_segments=[],
+                    solve_time_seconds=0.0,
+                )
+                solutions[day] = solution
 
         return solutions
 

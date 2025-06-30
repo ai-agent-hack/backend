@@ -104,6 +104,19 @@ def main():
         description="상세 경로 계산 (calculate-detailed)",
     )
 
+    # 1.6. Calculate Detailed Route with Time Order Maintained
+    test_api(
+        "POST",
+        f"{BASE_URL}/calculate-detailed",
+        data={
+            "plan_id": plan_id,
+            "travel_mode": "DRIVING",
+            "optimize_for": "distance",
+            "maintain_time_order": True,
+        },
+        description="시간대 순서 유지 경로 계산 (maintain_time_order=True)",
+    )
+
     # 2. 시작 전 상태 확인
     test_api("GET", f"{BASE_URL}/{plan_id}/statistics", description="Route 통계 정보")
 

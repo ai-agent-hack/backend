@@ -114,6 +114,7 @@ class RouteService:
                 location_mapping=location_mapping,
                 travel_mode=request.travel_mode,
                 optimize_for=request.optimize_for,
+                maintain_time_order=request.maintain_time_order,
                 google_maps_service=self.google_maps_service,
                 tsp_solver_service=self.tsp_solver_service,
             )
