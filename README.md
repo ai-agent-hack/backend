@@ -1,4 +1,4 @@
-# SOLID 原則に基づく FastAPI バックエンド
+# FastAPI バックエンド
 
 FastAPI バックエンドアプリケーションです。GCP Cloud SQL との統合に対応し、Docker でコンテナ化されています。
 
