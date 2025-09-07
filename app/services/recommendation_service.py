@@ -180,29 +180,35 @@ class RecommendationService:
             processing_metadata["processing_steps"].append(
                 f"MegaPhase1: {mega_phase1_time:.0f}ms"
             )
-            print(f"✅ MEGA PHASE 1 완료: {mega_phase1_time:.0f}ms")
+            print(f"✅ MEGA PHASE 1 完了: {mega_phase1_time:.0f}ms")
 
-            # 🚀 MEGA PHASE 2: Places API 폭발적 병렬 처리 (Places API爆発的並列処理)
+            # 🚀 MEGA PHASE 2: Places API爆発的並列処理
             phase2_start = time.time()
+            print(f"🚀 Phase 2 開始: {len(keywords)}個のキーワードで並列検索")
 
-            # 키워드 기반 검색 + 기본 검색 결합 (キーワード基準検索+基本検索結合)
+            # キーワード基準検索+基本検索結合
             all_search_tasks = []
 
-            # 키워드별 병렬 검색 (최적화된 버전 사용) (キーワード別並列検索（最適化版使用）)
-            for keyword in keywords[: self._max_keywords]:
+            # キーワード別並列検索（最適化版使用）
+            for idx, keyword in enumerate(keywords[: self._max_keywords]):
                 if self.places_service:
+                    print(f"  📍 検索タスク {idx+1}: '{keyword}'")
                     search_task = self.places_service.text_search_optimized(
                         keyword, pre_info.region, max_results=60
                     )
                     all_search_tasks.append(search_task)
 
-            # 모든 검색 동시 실행 (全検索同時実行)
+            # 全検索同時実行
             if all_search_tasks:
+                print(f"⚡ {len(all_search_tasks)}個の検索を並列実行中...")
+                search_start = time.time()
                 search_results = await asyncio.gather(
                     *all_search_tasks, return_exceptions=True
                 )
+                search_time = (time.time() - search_start) * 1000
+                print(f"✅ 並列検索完了: {search_time:.0f}ms")
 
-                all_place_ids = set()  # 중복 제거를 위한 set 사용 (重複除去のためset使用)
+                all_place_ids = set()  # 重複除去のためset使用
                 for result in search_results:
                     if not isinstance(result, Exception) and result:
                         all_place_ids.update(result[: self._places_per_keyword])
@@ -213,9 +219,13 @@ class RecommendationService:
 
             processing_metadata["api_calls_made"] += len(all_search_tasks)
 
-            # 배치별 Details 가져오기 (울트라 병렬) (バッチ別Details取得（ウルトラ並列）)
+            # バッチ別Details取得（ウルトラ並列）
+            details_start = time.time()
+            print(f"🔍 Details取得開始: {len(place_ids)}個")
             place_details = await self._get_place_details_ultra_optimized(place_ids)
-            processing_metadata["api_calls_made"] += len(place_ids)  # 실제 API 호출 수 (実際のAPIコール数)
+            details_time = (time.time() - details_start) * 1000
+            print(f"✅ Details取得完了: {details_time:.0f}ms")
+            processing_metadata["api_calls_made"] += len(place_ids)  # 実際のAPIコール数
             processing_metadata["total_spots_found"] = len(place_details)
 
             phase2_time = (time.time() - phase2_start) * 1000

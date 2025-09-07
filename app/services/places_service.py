@@ -27,67 +27,6 @@ class PlacesService:
             print(f"❌ PlacesService初期化失敗: {str(e)}")
             self.gmaps = None
 
-    async def text_search(
-        self,
-        query: str,
-        region: str,
-        language: str = "ja",
-        radius: int = 10000,
-        type: Optional[str] = None,
-    ) -> List[str]:
-        """
-        テキスト検索でplace_idリストを取得
-
-        Args:
-            query: 検索クエリ
-            region: 検索地域
-            language: 言語 (デフォルト: 日本語)
-            radius: 検索半径(メートル)
-            type: 場所タイプ (restaurant, tourist_attraction, etc.)
-
-        Returns:
-            place_idのリスト
-        """
-        if not self.gmaps:
-            print("⚠️ Google Maps API利用不可。フォールバック使用")
-            return [f"fallback_place_{hash(query)}_{i}" for i in range(5)]
-
-        try:
-            print(f"🔍 Places Text Search: '{query}' in {region}")
-
-            # 検索クエリ作成 (地域を含む)
-            search_query = f"{query} {region}"
-
-            # 🎯 スマートなアプローチ: Google Geocoding APIで地域自動認識
-            country_code = await self._detect_country_from_region(region)
-
-            print(f"🌍 自動検出された国コード: {country_code} (地域: {region})")
-
-            # Places API検索実行（地域情報を検索語に含む）
-            results = self.gmaps.places(
-                query=search_query,
-                language=language,
-                region=country_code,  # 自動検出された国コード使用
-                type=type,
-            )
-
-            place_ids = []
-            if results.get("results"):
-                for place in results["results"]:
-                    if place.get("place_id"):
-                        place_ids.append(place["place_id"])
-
-                print(f"✅ {len(place_ids)}個のplace_id取得: {query}")
-            else:
-                print(f"⚠️ 検索結果なし: {query}")
-
-            return place_ids[:20]  # 最大20個まで
-
-        except Exception as e:
-            print(f"❌ Places Text Search失敗 '{query}': {str(e)}")
-            # フォールバック
-            return [f"error_place_{hash(query)}_{i}" for i in range(3)]
-
     async def text_search_optimized(
         self,
         query: str,
@@ -97,35 +36,39 @@ class PlacesService:
         type: Optional[str] = None,
     ) -> List[str]:
         """
-        🚀 최적화된 텍스트 검색: 1페이지 + 페이지네이션 병렬 처리
+        🚀 最適化されたテキスト検索: 1ページ目 + ページネーション並列処理
 
         Args:
-            query: 검색 쿼리
-            region: 검색 지역
-            max_results: 최대 결과 수 (60개)
-            language: 언어
-            type: 장소 타입
+            query: 検索クエリ
+            region: 検索地域
+            max_results: 最大結果数 (60個)
+            language: 言語
+            type: 場所タイプ
 
         Returns:
-            place_id 리스트 (최대 60개)
+            place_idリスト (最大60個)
         """
         if not self.gmaps:
             print("⚠️ Google Maps API이용不可。フォールバック使用")
             return [f"fallback_place_{hash(query)}_{i}" for i in range(20)]
 
         try:
-            print(f"🚀 최적화된 Places Text Search: '{query}' in {region}")
+            print(f"🚀 最適化されたPlaces Text Search: '{query}' in {region}")
 
-            # 검색 쿼리 생성
+            # 検索クエリ生成
             search_query = f"{query} {region}"
             country_code = await self._detect_country_from_region(region)
 
-            # 첫 번째 페이지 검색
-            first_results = self.gmaps.places(
-                query=search_query,
-                language=language,
-                region=country_code,
-                type=type,
+            # 最初のページを検索 (非同期に変換)
+            loop = asyncio.get_event_loop()
+            first_results = await loop.run_in_executor(
+                None,
+                lambda: self.gmaps.places(
+                    query=search_query,
+                    language=language,
+                    region=country_code,
+                    type=type,
+                )
             )
 
             all_place_ids = []
@@ -174,16 +117,20 @@ class PlacesService:
         additional_place_ids = []
 
         try:
-            # 토큰이 활성화될 때까지 잠시 대기 (Google API 요구사항)
+            # トークンがアクティブになるまで待機 (Google API要件)
             await asyncio.sleep(2)
 
-            # 2페이지 가져오기
-            second_results = self.gmaps.places(
-                query=search_query,
-                language=language,
-                region=country_code,
-                type=type,
-                page_token=initial_token,
+            # 2ページ目を取得 (非同期)
+            loop = asyncio.get_event_loop()
+            second_results = await loop.run_in_executor(
+                None,
+                lambda: self.gmaps.places(
+                    query=search_query,
+                    language=language,
+                    region=country_code,
+                    type=type,
+                    page_token=initial_token,
+                )
             )
 
             if second_results.get("results"):
@@ -200,12 +147,16 @@ class PlacesService:
 
                 await asyncio.sleep(2)
 
-                third_results = self.gmaps.places(
-                    query=search_query,
-                    language=language,
-                    region=country_code,
-                    type=type,
-                    page_token=second_results["next_page_token"],
+                # 3ページ目も非同期で
+                third_results = await loop.run_in_executor(
+                    None,
+                    lambda: self.gmaps.places(
+                        query=search_query,
+                        language=language,
+                        region=country_code,
+                        type=type,
+                        page_token=second_results["next_page_token"],
+                    )
                 )
 
                 if third_results.get("results"):
@@ -244,40 +195,30 @@ class PlacesService:
 
             places_details = []
 
-            for place_id in place_ids:
-                try:
-                    # API呼び出し間隔調整 (Rate Limit対策)
-                    await asyncio.sleep(0.1)
-
-                    # Places Details API呼び出し
-                    result = self.gmaps.place(
-                        place_id=place_id,
-                        fields=[
-                            "place_id",
-                            "name",
-                            "formatted_address",
-                            "geometry",
-                            "rating",
-                            "user_ratings_total",
-                            "price_level",
-                            "types",  # 正しいフィールド名
-                            "photos",  # photo → photos
-                            "opening_hours",
-                            "website",
-                            "formatted_phone_number",
-                            "reviews",
-                        ],
-                        language="ja",
-                    )
-
-                    if result.get("result"):
-                        place_data = self._format_place_details(result["result"])
-                        places_details.append(place_data)
-
-                except Exception as e:
-                    print(f"❌ Place Details取得失敗 {place_id}: {str(e)}")
-                    # 個別エラーは無視して続行
-                    continue
+            # バッチごとに並列処理
+            batch_size = 10
+            batches = [place_ids[i:i+batch_size] for i in range(0, len(place_ids), batch_size)]
+            
+            for batch_idx, batch in enumerate(batches):
+                print(f"📦 バッチ {batch_idx+1}/{len(batches)} 処理中...")
+                
+                # バッチ内で並列処理
+                batch_tasks = []
+                for place_id in batch:
+                    task = self._get_place_detail_async(place_id)
+                    batch_tasks.append(task)
+                
+                # バッチ内の全タスクを並列実行
+                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                
+                # 成功した結果のみ追加
+                for result in batch_results:
+                    if not isinstance(result, Exception) and result:
+                        places_details.append(result)
+                
+                # バッチ間で少し待機（Rate Limit対策）
+                if batch_idx < len(batches) - 1:
+                    await asyncio.sleep(0.5)
 
             print(f"✅ {len(places_details)}個の詳細情報取得完了")
             return places_details
@@ -285,6 +226,43 @@ class PlacesService:
         except Exception as e:
             print(f"❌ Places Details一括取得失敗: {str(e)}")
             return self._create_fallback_places(place_ids)
+    
+    async def _get_place_detail_async(self, place_id: str) -> Optional[Dict[str, Any]]:
+        """
+        単一のPlace Detailを非同期で取得
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self.gmaps.place(
+                    place_id=place_id,
+                    fields=[
+                        "place_id",
+                        "name",
+                        "formatted_address",
+                        "geometry",
+                        "rating",
+                        "user_ratings_total",
+                        "price_level",
+                        "types",
+                        "photos",
+                        "opening_hours",
+                        "website",
+                        "formatted_phone_number",
+                        "reviews",
+                    ],
+                    language="ja",
+                )
+            )
+            
+            if result.get("result"):
+                return self._format_place_details(result["result"])
+            return None
+            
+        except Exception as e:
+            print(f"❌ Place Details取得失敗 {place_id}: {str(e)}")
+            return None
 
     def _format_place_details(self, place_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -457,8 +435,12 @@ class PlacesService:
         try:
             print(f"🔍 Geocoding APIで地域分析中: {region}")
 
-            # Google Geocoding APIで地域情報を照会
-            geocode_result = self.gmaps.geocode(region, language="en")
+            # Google Geocoding APIで地域情報を照会（非同期）
+            loop = asyncio.get_event_loop()
+            geocode_result = await loop.run_in_executor(
+                None,
+                lambda: self.gmaps.geocode(region, language="en")
+            )
 
             if geocode_result and len(geocode_result) > 0:
                 result = geocode_result[0]
@@ -584,68 +566,72 @@ class PlacesService:
         self, place_ids_batch: List[str], batch_idx: int
     ) -> List[Dict[str, Any]]:
         """
-        🔥 개별 배치 처리 (병렬 내부 로직)
+        🔥 個別バッチ処理 (並列内部ロジック)
         """
         batch_details = []
 
         try:
-            print(f"📦 배치 {batch_idx} 처리 시작: {len(place_ids_batch)}개")
+            print(f"📦 バッチ {batch_idx} 処理開始: {len(place_ids_batch)}個")
 
-            # 개별 Details API 호출들을 비동기로 처리
+            # セマフォアで同時実行を制限 (Rate Limit対応)
+            semaphore = asyncio.Semaphore(5)  # 同時5個まで
+            
+            async def get_with_semaphore(place_id):
+                async with semaphore:
+                    return await self._get_single_place_detail(place_id)
+            
+            # 個別Details APIコールを非同期で処理
             detail_tasks = [
-                self._get_single_place_detail(place_id) for place_id in place_ids_batch
+                get_with_semaphore(place_id) for place_id in place_ids_batch
             ]
 
-            # 배치 내 병렬 처리 (0.05초 간격으로 시작)
-            detail_results = []
-            for i, task in enumerate(detail_tasks):
-                if i > 0:
-                    await asyncio.sleep(0.05)  # Rate limit 대응
-                detail_results.append(asyncio.create_task(task))
-
-            # 모든 세부 작업 완료 대기
+            # 全詳細タスクを即座に並列実行
             completed_details = await asyncio.gather(
-                *detail_results, return_exceptions=True
+                *detail_tasks, return_exceptions=True
             )
 
-            # 성공한 결과만 수집
+            # 成功した結果のみ収集
             for detail in completed_details:
                 if not isinstance(detail, Exception) and detail:
                     batch_details.append(detail)
 
             print(
-                f"✅ 배치 {batch_idx} 완료: {len(batch_details)}/{len(place_ids_batch)}개 성공"
+                f"✅ バッチ {batch_idx} 完了: {len(batch_details)}/{len(place_ids_batch)}個成功"
             )
 
         except Exception as e:
-            print(f"❌ 배치 {batch_idx} 실패: {str(e)}")
+            print(f"❌ バッチ {batch_idx} 失敗: {str(e)}")
 
         return batch_details
 
     async def _get_single_place_detail(self, place_id: str) -> Optional[Dict[str, Any]]:
         """
-        ⚡ 단일 Place Detail 조회 (비동기 최적화)
+        ⚡ 単一Place Detail照会 (非同期最適化)
         """
         try:
-            # Places Details API 호출
-            result = self.gmaps.place(
-                place_id=place_id,
-                fields=[
-                    "place_id",
-                    "name",
-                    "formatted_address",
-                    "geometry",
-                    "rating",
-                    "user_ratings_total",
-                    "price_level",
-                    "type",
-                    "photo",
-                    "opening_hours",
-                    "website",
-                    "formatted_phone_number",
-                    "reviews",
-                ],
-                language="ja",
+            loop = asyncio.get_event_loop()
+            # Places Details APIコール (非同期)
+            result = await loop.run_in_executor(
+                None,
+                lambda: self.gmaps.place(
+                    place_id=place_id,
+                    fields=[
+                        "place_id",
+                        "name",
+                        "formatted_address",
+                        "geometry",
+                        "rating",
+                        "user_ratings_total",
+                        "price_level",
+                        "type",
+                        "photo",
+                        "opening_hours",
+                        "website",
+                        "formatted_phone_number",
+                        "reviews",
+                    ],
+                    language="ja",
+                )
             )
 
             if result.get("result"):
