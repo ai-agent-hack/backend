@@ -1,11 +1,11 @@
 import asyncio
 import numpy as np
 from typing import List, Dict, Any, Optional
-from sentence_transformers import SentenceTransformer
 import os
 from datetime import datetime
 
 from app.models.pre_info import PreInfo
+from app.core.model_loader import get_model
 
 
 class VectorSearchService:
@@ -15,20 +15,15 @@ class VectorSearchService:
     """
 
     def __init__(self):
-        try:
-            print("🎯 VectorSearchService初期化開始...")
-
-            # Sentence Transformer モデル初期化
-            # 多言語対応モデル使用 (日本語・韓国語・英語サポート)
-            model_name = "paraphrase-multilingual-MiniLM-L12-v2"
-            print(f"📡 Sentence Transformerモデル読み込み中: {model_name}")
-
-            self.model = SentenceTransformer(model_name)
-            print("✅ VectorSearchService初期化完了")
-
-        except Exception as e:
-            print(f"❌ VectorSearchService初期化失敗: {str(e)}")
-            self.model = None
+        print("🎯 VectorSearchService初期化開始...")
+        
+        # グローバルモデルローダーからモデルを取得
+        self.model = get_model()
+        
+        if self.model is None:
+            print("⚠️ VectorSearchService: モデルが未ロード。起動時のロードを確認してください")
+        else:
+            print("✅ VectorSearchService初期化完了（グローバルモデル使用）")
 
     async def find_similar_places(
         self, pre_info: PreInfo, places: List[Dict[str, Any]], limit: int = 80

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,29 @@ from app.core.exceptions import (
     UnauthorizedError,
     ForbiddenError,
 )
+from app.core.model_loader import load_model, warmup
+
+# Lifespan context manager for startup/shutdown events
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print(f"🚀 Starting {settings.PROJECT_NAME} v{settings.VERSION}")
+    print(f"🌍 Environment: {settings.ENVIRONMENT}")
+    print(f"📚 API Documentation: {settings.API_V1_STR}/docs")
+    
+    # Sentence Transformerモデルのプリロード
+    try:
+        print("📦 Sentence Transformerモデルをプリロード中...")
+        load_model()
+        warmup()
+        print("✅ モデルのプリロードとウォームアップが完了しました")
+    except Exception as e:
+        print(f"⚠️ モデルプリロード失敗（サービスは続行）: {str(e)}")
+    
+    yield
+    
+    # Shutdown
+    print(f"👋 Shutting down {settings.PROJECT_NAME}")
 
 # Create FastAPI application instance
 app = FastAPI(
@@ -24,6 +48,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    lifespan=lifespan,
 )
 
 # Add session middleware
@@ -152,17 +177,4 @@ async def read_root():
     }
 
 
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Startup event handler."""
-    print(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
-    print(f"Environment: {settings.ENVIRONMENT}")
-    print(f"API Documentation: {settings.API_V1_STR}/docs")
-
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown event handler."""
-    print(f"Shutting down {settings.PROJECT_NAME}")
+# Legacy startup/shutdown events removed - using lifespan context manager instead

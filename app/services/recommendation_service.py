@@ -356,6 +356,7 @@ class RecommendationService:
     async def _prepare_vector_service(self) -> bool:
         """Vector 서비스 준비 (Vectorサービス準備)"""
         # Vector 서비스가 준비되었는지 확인 (Vectorサービスが準備されたか確認)
+        # グローバルモデルが既にロード済みなので、サービスの存在のみ確認
         return self.vector_search_service is not None
 
     async def _get_place_details_ultra_optimized(
