@@ -12,7 +12,6 @@ from app.schemas.spot import RecommendSpots
 from app.services.llm_service import LLMService
 from app.services.google_trends_service import GoogleTrendsService
 from app.services.places_service import PlacesService
-from app.services.vector_search_service import VectorSearchService
 from app.services.scoring_service import ScoringService
 
 # Initialize module-level logger (モジュールレベルのロガーを初期化)
@@ -44,10 +43,6 @@ class RecommendationService:
             self.places_service = PlacesService()
             print("✅ PlacesService初期化完了")
 
-            # Vector Searchサービス初期化
-            print("🎯 VectorSearchService初期化中...")
-            self.vector_search_service = VectorSearchService()
-            print("✅ VectorSearchService初期化完了")
 
             # Scoringサービス初期化
             print("🏆 ScoringService初期化中...")
@@ -62,7 +57,6 @@ class RecommendationService:
             # 강화된 배치 설정 (키워드 증가로 정확도 향상) (強化されたバッチ設定（キーワード増加により精度向上）)
             self._max_keywords = 8  # 3개 → 8개로 증가 (정확도 향상) (3個→8個に増加（精度向上）)
             self._places_per_keyword = 12  # 키워드당 더 많은 결과 (キーワードあたりより多くの結果)
-            self._vector_limit = 80  # 50개 → 80개로 복원 (50個→80個に復元)
             self._final_limit = 30  # 24개 → 30개로 증가 (24個→30個に増加)
             self._batch_size = 50  # 더 큰 배치 크기 (より大きなバッチサイズ)
 
@@ -74,7 +68,6 @@ class RecommendationService:
             self.llm_service = None
             self.google_trends_service = None
             self.places_service = None
-            self.vector_search_service = None
             self.scoring_service = None
 
     def _get_cache_key(self, pre_info: PreInfo) -> str:
@@ -156,9 +149,6 @@ class RecommendationService:
             basic_search_task = self._prepare_basic_search(pre_info)
             tasks.append(("basic_search", basic_search_task))
 
-            # Task 3: Vector 모델 준비 (백그라운드) (Vectorモデル準備（バックグラウンド）)
-            vector_prep_task = self._prepare_vector_service()
-            tasks.append(("vector_prep", vector_prep_task))
 
             print(f"🔥 {len(tasks)}개 작업 병렬 실행 시작...")
 
@@ -174,7 +164,6 @@ class RecommendationService:
                 else ["바르셀로나 조용한 장소", "바르셀로나 공원", "바르셀로나 수도원"]
             )
             basic_places = results[1] if not isinstance(results[1], Exception) else []
-            vector_ready = results[2] if not isinstance(results[2], Exception) else True
 
             mega_phase1_time = (time.time() - mega_start) * 1000
             processing_metadata["processing_steps"].append(
@@ -234,20 +223,13 @@ class RecommendationService:
             )
             print(f"✅ MEGA PHASE 2 완료: {phase2_time:.0f}ms")
 
-            # 🎯 MEGA PHASE 3: Vector + LLM + Scoring 초병렬 처리 (Vector + LLM + Scoring超並列処理)
+            # 🎯 MEGA PHASE 3: LLM + Scoring 초병렬 처리 (LLM + Scoring超並列処理)
             phase3_start = time.time()
 
-            # 동시 실행: Vector Search + LLM 준비 (同時実行：Vector Search + LLM準備)
-            vector_task = self._vector_search_mega_optimized(pre_info, place_details)
-
-            # Vector Search 완료 후 LLM + Scoring 병렬 (Vector Search完了後LLM + Scoring並列)
-            vector_candidates = await vector_task
-            processing_metadata["api_calls_made"] += 1
-
             # LLM과 기본 스코어링을 동시에 (LLMと基本スコアリングを同時に)
-            llm_task = self._llm_rerank_ultra_fast(vector_candidates, pre_info)
+            llm_task = self._llm_rerank_ultra_fast(place_details, pre_info)
             basic_scoring_task = self._basic_scoring_parallel(
-                vector_candidates, pre_info
+                place_details, pre_info
             )
 
             llm_result, basic_scores = await asyncio.gather(
@@ -261,7 +243,7 @@ class RecommendationService:
                 final_spots = (
                     basic_scores[: self._final_limit]
                     if not isinstance(basic_scores, Exception)
-                    else vector_candidates[: self._final_limit]
+                    else place_details[: self._final_limit]
                 )
 
             processing_metadata["api_calls_made"] += 1
@@ -353,11 +335,6 @@ class RecommendationService:
         basic_keywords = [f"{pre_info.region} 관광", f"{pre_info.region} 명소"]
         return basic_keywords
 
-    async def _prepare_vector_service(self) -> bool:
-        """Vector 서비스 준비 (Vectorサービス準備)"""
-        # Vector 서비스가 준비되었는지 확인 (Vectorサービスが準備されたか確認)
-        # グローバルモデルが既にロード済みなので、サービスの存在のみ確認
-        return self.vector_search_service is not None
 
     async def _get_place_details_ultra_optimized(
         self, place_ids: List[str]
@@ -411,41 +388,9 @@ class RecommendationService:
         self, pre_info: PreInfo, places: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """메가 최적화된 Vector Search (メガ最適化されたVector Search)"""
-        if self.vector_search_service is None:
-            print("⚠️ Vector Search 없음. 빠른 선별")
-            return places[: self._vector_limit]
+        # Vector service removed - directly return places
+        return places[: self._final_limit * 2]
 
-        try:
-            # CPU 집약적 작업을 별도 스레드에서 (CPU集約的作業を別スレッドで)
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                self._executor,
-                lambda: self._vector_search_cpu_intensive(pre_info, places),
-            )
-
-            print(f"✅ 메가 Vector Search 완료: {len(result)}개")
-            return result[: self._vector_limit]
-        except Exception as e:
-            print(f"❌ Vector Search 실패: {str(e)}")
-            return places[: self._vector_limit]
-
-    def _vector_search_cpu_intensive(self, pre_info, places):
-        """CPU 집약적 Vector Search (별도 스레드) (CPU集約的Vector Search（別スレッド））"""
-        # 간단한 유사도 계산 (실제로는 Sentence Transformer 사용) (シンプルな類似度計算（実際にはSentence Transformer使用）)
-        scored_places = []
-        query = f"{pre_info.atmosphere} {pre_info.region}"
-
-        for place in places:
-            # 간단한 텍스트 매칭 점수 (シンプルなテキストマッチングスコア)
-            name = place.get("name", "")
-            score = len(set(query.lower().split()) & set(name.lower().split()))
-            place["similarity_score"] = score
-            scored_places.append(place)
-
-        # 점수별 정렬 (スコア別ソート)
-        return sorted(
-            scored_places, key=lambda x: x.get("similarity_score", 0), reverse=True
-        )
 
     async def _llm_rerank_ultra_fast(
         self, candidates: List[Dict], pre_info: PreInfo
