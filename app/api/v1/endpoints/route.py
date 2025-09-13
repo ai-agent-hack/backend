@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
@@ -12,7 +12,6 @@ from app.schemas.route import (
     RouteStatistics,
     RouteFullDetail,
     RouteWithDays,
-    RouteResponse,
 )
 from app.services.route_service import RouteService
 from app.services.google_maps_service import GoogleMapsService

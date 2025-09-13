@@ -1,15 +1,8 @@
 from fastapi import APIRouter, status, Depends, HTTPException
-from datetime import time
 from typing import Optional
 
 from app.schemas.spot import (
     RecommendSpots,
-    TimeSlotSpots,
-    Spot,
-    SpotDetail,
-    TimeSlot,
-    DayOfWeek,
-    BusinessHours,
     RecommendSpotFromPreInfoRequest,
     RefineTriPlanRequest,
 )
@@ -34,77 +27,6 @@ from app.core.dependencies import (
 )
 
 router = APIRouter()
-
-
-def _generate_sample_spots() -> RecommendSpots:
-    """サンプルのスポット情報を生成する共通関数 (一時的)"""
-    business_hours = {
-        day: BusinessHours(
-            open_time=time(9, 0),  # 9:00
-            close_time=time(17, 0),  # 17:00
-        )
-        for day in DayOfWeek
-    }
-
-    return RecommendSpots(
-        recommend_spot_id="aaaaaaa",
-        recommend_spots=[
-            TimeSlotSpots(
-                time_slot=TimeSlot.MORNING,
-                spots=[
-                    Spot(
-                        spot_id="aaaa",
-                        longitude=139,
-                        latitude=35,
-                        recommendation_reason="夜景が綺麗って口コミで言われてるでー",
-                        details=SpotDetail(
-                            name="六甲山",
-                            congestion=[1, 3, 4, 5] + [0] * 20,  # 0-23時の混雑度
-                            business_hours=business_hours,
-                            price=500,
-                        ),
-                        selected=False,
-                    )
-                ],
-            ),
-            TimeSlotSpots(
-                time_slot=TimeSlot.AFTERNOON,
-                spots=[
-                    Spot(
-                        spot_id="aaaa",
-                        longitude=139,
-                        latitude=35,
-                        recommendation_reason="夜景が綺麗って口コミで言われてるでー",
-                        details=SpotDetail(
-                            name="六甲山",
-                            congestion=[1, 3, 4, 5] + [0] * 20,  # 0-23時の混雑度
-                            business_hours=business_hours,
-                            price=500,
-                        ),
-                        selected=False,
-                    )
-                ],
-            ),
-            TimeSlotSpots(
-                time_slot=TimeSlot.NIGHT,
-                spots=[
-                    Spot(
-                        spot_id="aaaa",
-                        longitude=139,
-                        latitude=35,
-                        recommendation_reason="夜景が綺麗って口コミで言われてるでー",
-                        details=SpotDetail(
-                            name="六甲山",
-                            congestion=[1, 3, 4, 5] + [0] * 20,  # 0-23時の混雑度
-                            business_hours=business_hours,
-                            price=500,
-                        ),
-                        selected=False,
-                    )
-                ],
-            ),
-        ],
-    )
 
 
 @router.post(

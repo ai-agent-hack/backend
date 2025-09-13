@@ -1,5 +1,4 @@
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 import copy
 
 from app.schemas.spot import RecommendSpots, RefineTriPlanRequest, ChatMessage

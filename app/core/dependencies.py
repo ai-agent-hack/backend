@@ -23,7 +23,6 @@ from app.services.rec_plan import RecPlanService
 from app.services.rec_spot import RecSpotService
 from app.services.trip_refine import TripRefineService
 from app.models.user import User
-from app.core.exceptions import UserNotFoundError
 from app.services.route_service import RouteService
 from app.services.google_maps_service import GoogleMapsService
 from app.services.tsp_solver_service import TSPSolverService

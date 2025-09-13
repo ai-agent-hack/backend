@@ -4,7 +4,6 @@ from typing import Any
 from app.schemas.user import (
     User,
     FirebaseUserCreate,
-    FirebaseAuth,
     SessionLoginResponse,
     LogoutResponse,
 )
@@ -12,7 +11,6 @@ from app.services.user import UserService
 from app.core.dependencies import (
     get_user_service,
     get_current_user_firebase,
-    get_current_user_session,
     get_current_user_flexible,
 )
 from app.core.exceptions import UserAlreadyExistsError, InvalidCredentialsError

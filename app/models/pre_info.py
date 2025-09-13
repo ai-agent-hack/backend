@@ -1,7 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Index, ForeignKey
+from sqlalchemy import Integer, String, DateTime, Text, Index, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime
-from typing import Optional, List
+from typing import List
 
 from app.models.base import Base
 

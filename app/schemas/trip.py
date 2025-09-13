@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from datetime import datetime
 from app.schemas.spot import RecommendSpots
 

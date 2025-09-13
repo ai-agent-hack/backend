@@ -7,7 +7,6 @@ import vertexai
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 from app.models.pre_info import PreInfo
-from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -146,7 +145,7 @@ class LLMService:
 以下の旅行情報を分析して、スポット検索に使用するキーワードと推薦重みを生成してください。
 
 **旅行情報:**
-- 地域: {pre_info.region}  
+- 地域: {pre_info.region}
 - 旅行期間: {pre_info.start_date.strftime('%Y-%m-%d')} ~ {pre_info.end_date.strftime('%Y-%m-%d')}
 - 予算: {pre_info.budget:,}円
 - 雰囲気/好み: {pre_info.atmosphere}
@@ -164,16 +163,16 @@ class LLMService:
    - 雰囲気単独キーワード (1-2個)
    - 具体的で検索可能な形式
    - 雰囲気を反映した多様な特性キーワード含む
-   
+
 2. 推薦重みを0-1の値で設定:
    - price: 価格重要度 (予算が少ないほど高く)
-   - rating: 評点重要度 
+   - rating: 評点重要度
    - congestion: 混雑度重要度 (静かな雰囲気なら高く)
    - similarity: 意味的類似度重要度 (雰囲気マッチ度)
 
 **雰囲気別キーワード生成例:**
 - "静か/平和" → "静かなカフェ", "閑静な公園", "平和な庭園"
-- "活気/賑やか" → "人気グルメ", "繁華街", "ショッピング街" 
+- "活気/賑やか" → "人気グルメ", "繁華街", "ショッピング街"
 - "ロマンチック" → "ロマンチックレストラン", "夜景スポット", "カップルカフェ"
 - "家族向け" → "ファミリーレストラン", "子供の遊び場", "体験施設"
 
@@ -503,7 +502,7 @@ class LLMService:
    - レストラン、観光地、文化施設、ショッピングなど多様なタイプを含む
    - 同一地域への集中を防止
 
-3. **品質優先順位**: 
+3. **品質優先順位**:
    - 評点4.0以上を優先選択
    - レビュー数が多い信頼できる場所を優先
    - ベクトル類似度スコアを考慮

@@ -1,12 +1,9 @@
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
 from app.models.rec_plan import RecPlan
-from app.models.pre_info import PreInfo
 from app.repositories.rec_plan import RecPlanRepository
 from app.repositories.pre_info import PreInfoRepository
 from app.repositories.rec_spot import RecSpotRepository
-from app.schemas.spot import RecommendSpots
 from app.services.rec_spot import RecSpotService
 
 

@@ -18,6 +18,7 @@ from app.core.exceptions import (
 )
 from app.core.model_loader import load_model, warmup
 
+
 # Lifespan context manager for startup/shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,7 +26,7 @@ async def lifespan(app: FastAPI):
     print(f"🚀 Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     print(f"🌍 Environment: {settings.ENVIRONMENT}")
     print(f"📚 API Documentation: {settings.API_V1_STR}/docs")
-    
+
     # Sentence Transformerモデルのプリロード
     try:
         print("📦 Sentence Transformerモデルをプリロード中...")
@@ -34,11 +35,12 @@ async def lifespan(app: FastAPI):
         print("✅ モデルのプリロードとウォームアップが完了しました")
     except Exception as e:
         print(f"⚠️ モデルプリロード失敗（サービスは続行）: {str(e)}")
-    
+
     yield
-    
+
     # Shutdown
     print(f"👋 Shutting down {settings.PROJECT_NAME}")
+
 
 # Create FastAPI application instance
 app = FastAPI(

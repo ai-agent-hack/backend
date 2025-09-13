@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Index
+from sqlalchemy import Integer, String, ForeignKey, Index
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB
 from typing import Optional, Dict, Any

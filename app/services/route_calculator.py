@@ -1,8 +1,6 @@
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 from dataclasses import dataclass, field
-import time
 import logging
-from decimal import Decimal
 
 from app.models.rec_spot import RecSpot
 from app.services.google_maps_service import (

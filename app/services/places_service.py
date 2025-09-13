@@ -2,7 +2,6 @@ import asyncio
 import os
 from typing import List, Dict, Any, Optional
 import googlemaps
-from app.models.pre_info import PreInfo
 
 
 class PlacesService:
@@ -68,7 +67,7 @@ class PlacesService:
                     language=language,
                     region=country_code,
                     type=type,
-                )
+                ),
             )
 
             all_place_ids = []
@@ -130,7 +129,7 @@ class PlacesService:
                     region=country_code,
                     type=type,
                     page_token=initial_token,
-                )
+                ),
             )
 
             if second_results.get("results"):
@@ -156,7 +155,7 @@ class PlacesService:
                         region=country_code,
                         type=type,
                         page_token=second_results["next_page_token"],
-                    )
+                    ),
                 )
 
                 if third_results.get("results"):
@@ -178,7 +177,7 @@ class PlacesService:
         """
         Places API結果をフォーマット
         """
-        
+
         geometry = place_data.get("geometry", {})
         location = geometry.get("location", {})
 
@@ -195,7 +194,9 @@ class PlacesService:
             "ratings_total": place_data.get("user_ratings_total", 0),
             "price_level": place_data.get("price_level", 0),
             "types": place_data.get("types", []),  # 正しいフィールド名
-            "photos": self._extract_photo_urls(photo_field),  # 動的に選択されたフィールドを使用
+            "photos": self._extract_photo_urls(
+                photo_field
+            ),  # 動的に選択されたフィールドを使用
             "opening_hours": self._format_opening_hours(
                 place_data.get("opening_hours")
             ),
@@ -210,7 +211,7 @@ class PlacesService:
         """
         if not self.gmaps or not photos:
             return []
-        
+
         # photosが実際にリストかチェック
         if not isinstance(photos, list):
             # 単一のphotoオブジェクトの場合の処理
@@ -348,8 +349,7 @@ class PlacesService:
             # Google Geocoding APIで地域情報を照会（非同期）
             loop = asyncio.get_event_loop()
             geocode_result = await loop.run_in_executor(
-                None,
-                lambda: self.gmaps.geocode(region, language="en")
+                None, lambda: self.gmaps.geocode(region, language="en")
             )
 
             if geocode_result and len(geocode_result) > 0:
@@ -485,11 +485,11 @@ class PlacesService:
 
             # セマフォアで同時実行を制限 (Rate Limit対応)
             semaphore = asyncio.Semaphore(5)  # 同時5個まで
-            
+
             async def get_with_semaphore(place_id):
                 async with semaphore:
                     return await self._get_single_place_detail(place_id)
-            
+
             # 個別Details APIコールを非同期で処理
             detail_tasks = [
                 get_with_semaphore(place_id) for place_id in place_ids_batch
@@ -541,7 +541,7 @@ class PlacesService:
                         "reviews",
                     ],
                     language="ja",
-                )
+                ),
             )
 
             if result.get("result"):

@@ -1,7 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Index
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy import Integer, String, Boolean, DateTime, Index
+from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
-from typing import Optional
 
 from app.models.base import Base
 

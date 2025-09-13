@@ -14,15 +14,11 @@ from app.repositories.pre_info import PreInfoRepository
 from app.services.google_maps_service import (
     GoogleMapsService,
     LocationCoordinate,
-    DistanceMatrixResult,
 )
 from app.services.tsp_solver_service import TSPSolverService, TSPSolution
 from app.schemas.route import (
     RouteCalculationRequest,
     RouteCalculationResponse,
-    RouteCreate,
-    RouteDayCreate,
-    RouteSegmentCreate,
 )
 from app.models.rec_spot import RecSpot
 from app.services.route_calculator import (

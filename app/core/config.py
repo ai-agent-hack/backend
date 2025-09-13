@@ -1,7 +1,6 @@
 from typing import List, Optional
 from pydantic import EmailStr, field_validator
 from pydantic_settings import BaseSettings
-import os
 
 
 class Settings(BaseSettings):

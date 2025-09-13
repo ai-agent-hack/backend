@@ -8,9 +8,7 @@ import json
 import logging
 
 from app.models.pre_info import PreInfo
-from app.schemas.spot import RecommendSpots
 from app.services.llm_service import LLMService
-from app.services.google_trends_service import GoogleTrendsService
 from app.services.places_service import PlacesService
 from app.services.scoring_service import ScoringService
 
@@ -32,11 +30,6 @@ class RecommendationService:
             print("🤖 LLMService初期化中...")
             self.llm_service = LLMService()
             print("✅ LLMService初期化完了")
-
-            # Google Trendsサービス初期化
-            print("🔥 GoogleTrendsService初期化中...")
-            self.google_trends_service = GoogleTrendsService()
-            print("✅ GoogleTrendsService初期化完了")
 
             # Placesサービス初期化
             print("🗺️ PlacesService初期化中...")
@@ -66,7 +59,6 @@ class RecommendationService:
             print(f"❌ RecommendationService初期化失敗: {str(e)}")
             # 初期化失敗してもサービスは継続実行 (초기화 실패해도 서비스는 계속 실행)
             self.llm_service = None
-            self.google_trends_service = None
             self.places_service = None
             self.scoring_service = None
 
@@ -1083,10 +1075,10 @@ class RecommendationService:
         price_level = place_data.get("price_level", 0)
         opening_hours = place_data.get("opening_hours", {})
         address = place_data.get("address", "")
-        
+
         # 場所の説明部分を構築
         description_parts = []
-        
+
         # 場所のタイプに基づく説明
         type_descriptions = {
             "restaurant": "レストラン",
@@ -1120,17 +1112,17 @@ class RecommendationService:
             "train_station": "駅",
             "subway_station": "地下鉄駅"
         }
-        
+
         # メインのタイプを特定
         main_type = None
         for place_type in types:
             if place_type in type_descriptions:
                 main_type = type_descriptions[place_type]
                 break
-        
+
         if main_type:
             description_parts.append(main_type)
-        
+
         # 価格帯の情報（レストランやカフェなどの場合）
         if price_level > 0 and main_type in ["レストラン", "カフェ", "バー"]:
             price_descriptions = {
@@ -1141,7 +1133,7 @@ class RecommendationService:
             }
             if price_level in price_descriptions:
                 description_parts.append(price_descriptions[price_level])
-        
+
         # 評価とレビュー数の情報
         if rating > 0 and ratings_total > 0:
             if ratings_total >= 1000:
@@ -1150,14 +1142,14 @@ class RecommendationService:
                 description_parts.append(f"評価{rating:.1f}（{ratings_total}件のレビュー）")
             else:
                 description_parts.append(f"評価{rating:.1f}")
-        
+
         # 営業時間の情報
         if opening_hours:
             if opening_hours.get("open_now") is True:
                 description_parts.append("現在営業中")
             elif opening_hours.get("open_now") is False:
                 description_parts.append("現在営業時間外")
-            
+
             # 営業時間の詳細（あれば）
             weekday_text = opening_hours.get("weekday_text", [])
             if weekday_text and len(weekday_text) > 0:
@@ -1165,7 +1157,7 @@ class RecommendationService:
                 today_hours = weekday_text[0] if isinstance(weekday_text[0], str) else ""
                 if "24 時間営業" in today_hours or "24時間" in today_hours:
                     description_parts.append("24時間営業")
-        
+
         # エリア情報（住所から抽出）
         if address:
             # 日本の住所から区・市を抽出
@@ -1174,7 +1166,7 @@ class RecommendationService:
             if area_match:
                 area = area_match.group(1)
                 description_parts.append(f"{area}エリア")
-        
+
         # 特殊な施設タイプの追加情報
         special_features = []
         for place_type in types:
@@ -1186,10 +1178,10 @@ class RecommendationService:
                 continue  # 一般的すぎるので無視
             elif place_type == "food" and main_type not in ["レストラン", "カフェ"]:
                 special_features.append("飲食店")
-        
+
         if special_features:
             description_parts.extend(special_features[:2])  # 最大2つまで
-        
+
         # 文章を組み立て
         if description_parts:
             # 最初の要素（場所のタイプ）を除いて、残りを「、」で結合

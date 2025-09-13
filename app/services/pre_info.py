@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 
 from app.models.pre_info import PreInfo

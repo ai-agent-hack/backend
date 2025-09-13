@@ -3,7 +3,6 @@ import json
 import firebase_admin
 from firebase_admin import credentials, auth
 from typing import Optional
-from app.core.config import settings
 
 
 class FirebaseService:
